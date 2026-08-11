@@ -1,6 +1,8 @@
 package com.example.service;
 
+import com.example.dao.TransactionLogDao;
 import com.example.dao.UserDao;
+import com.example.entity.TransactionLog;
 import com.example.entity.User;
 import com.example.common.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +41,7 @@ import static org.mockito.Mockito.*;
 class UserServiceTest {
 
     @Mock private UserDao userDao;
+    @Mock private TransactionLogDao txLogDao;
     @InjectMocks private UserService userService;
 
     private User sampleBuyer;
@@ -127,7 +130,7 @@ class UserServiceTest {
         @Test
         @DisplayName("注册 - 用户名已存在时抛出异常")
         void registerDuplicateUsername() {
-            when(userDao.findByUsername("zhangsan")).thenReturn(Optional.of(sampleBuyer));
+            when(userDao.findByUsernameIgnoreCase("zhangsan")).thenReturn(Optional.of(sampleBuyer));
             BusinessException ex = assertThrows(BusinessException.class,
                     () -> userService.register("zhangsan", "Zhang1234", "z@x.com", "BUYER"));
             assertTrue(ex.getMessage().contains("已存在"));
@@ -268,6 +271,100 @@ class UserServiceTest {
             BusinessException ex = assertThrows(BusinessException.class,
                     () -> userService.setStatus(2L, 0, 1L));
             assertEquals(403, ex.getCode());
+        }
+    }
+
+    // ====== 账户流水模块 ======
+    @Nested
+    @DisplayName("账户流水模块")
+    class TxLog {
+
+        @BeforeEach
+        void setUp() {
+            userService = new UserService(userDao, txLogDao);
+            when(userDao.findById(1L)).thenReturn(Optional.of(sampleBuyer));
+            when(userDao.save(any(User.class))).thenReturn(sampleBuyer);
+        }
+
+        @Test
+        @DisplayName("listTransactions: 用户存在时返回 txLogDao.findByUserId 结果")
+        void listTransactionsUserFound() {
+            List<TransactionLog> mockLogs = Arrays.asList(
+                    new TransactionLog(1L, "RECHARGE", 50000, 550000L, null, "充值"),
+                    new TransactionLog(1L, "PAY", -100000, 450000L, "NO001", "消费")
+            );
+            when(txLogDao.findByUserId(1L)).thenReturn(mockLogs);
+
+            List<TransactionLog> result = userService.listTransactions(1L);
+
+            assertEquals(2, result.size());
+            verify(txLogDao, times(1)).findByUserId(1L);
+        }
+
+        @Test
+        @DisplayName("listTransactions: userId 为 null 抛异常")
+        void listTransactionsUserIdNull() {
+            assertThrows(BusinessException.class,
+                    () -> userService.listTransactions(null));
+        }
+
+        @Test
+        @DisplayName("listTransactions: 用户不存在抛 404")
+        void listTransactionsUserNotFound() {
+            when(userDao.findById(999L)).thenReturn(Optional.empty());
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> userService.listTransactions(999L));
+            assertEquals(404, ex.getCode());
+        }
+
+        @Test
+        @DisplayName("listTransactions: txLogDao 为 null (旧构造) 返回空 list")
+        void listTransactionsTxLogDaoNull() {
+            UserService oldService = new UserService(userDao, null);
+            List<TransactionLog> result = oldService.listTransactions(1L);
+            assertNotNull(result);
+            assertTrue(result.isEmpty());
+        }
+
+        @Test
+        @DisplayName("recharge 成功时调用 txLogDao.save 一次，类型=RECHARGE，金额为正，balanceAfter>=amount")
+        void rechargeWriteTxLog() {
+            int amount = 50000;
+            when(txLogDao.save(any(TransactionLog.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            userService.recharge(1L, amount);
+
+            verify(txLogDao, times(1)).save(any(TransactionLog.class));
+            verify(txLogDao).save(argThat(log ->
+                    "RECHARGE".equals(log.getType())
+                            && log.getAmount() > 0
+                            && log.getBalanceAfter() >= log.getAmount()
+            ));
+        }
+
+        @Test
+        @DisplayName("deductBalance 成功时写 PAY 流水，amount 为负")
+        void deductBalanceWriteTxLog() {
+            int amount = 100000;
+            when(txLogDao.save(any(TransactionLog.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            userService.deductBalance(1L, amount);
+
+            verify(txLogDao, times(1)).save(any(TransactionLog.class));
+            verify(txLogDao).save(argThat(log ->
+                    "PAY".equals(log.getType()) && log.getAmount() < 0
+            ));
+        }
+
+        @Test
+        @DisplayName("recharge 金额<=0 不写流水")
+        void rechargeInvalidAmountNoTxLog() {
+            UserService service = new UserService(userDao, txLogDao);
+            when(userDao.findById(1L)).thenReturn(Optional.of(sampleBuyer));
+
+            assertThrows(BusinessException.class, () -> service.recharge(1L, 0));
+            assertThrows(BusinessException.class, () -> service.recharge(1L, -100));
+            verify(txLogDao, never()).save(any());
         }
     }
 }

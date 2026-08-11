@@ -37,6 +37,15 @@ public class InMemoryUserDao implements UserDao {
     }
 
     @Override
+    public Optional<User> findByUsernameIgnoreCase(String username) {
+        if (username == null) return Optional.empty();
+        final String key = username.trim().toLowerCase(Locale.ROOT);
+        return store.values().stream()
+                .filter(u -> u.getUsername() != null && key.equals(u.getUsername().trim().toLowerCase(Locale.ROOT)))
+                .findFirst();
+    }
+
+    @Override
     public List<User> findAll() {
         return new ArrayList<>(store.values());
     }

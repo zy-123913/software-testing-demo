@@ -33,7 +33,7 @@ public class OrderService {
 
     /**
      * 创建订单（买家下单）
-     * 事务链路：校验商品 → 校验买家 → 扣库存 → 扣余额 → 创建订单
+     * 事务链路：校验商品 → 校验买家 → 扣库存 → 扣余额(写PAY流水+订单号) → 保存订单
      */
     public Order create(Long buyerId, Long productId, Integer quantity, String shippingAddress) {
         if (buyerId == null) throw new BusinessException("买家 ID 不能为空");
@@ -47,12 +47,14 @@ public class OrderService {
         // 1. 先扣库存
         productService.deductStock(productId, quantity);
 
-        // 2. 计算总价
+        // 2. 计算总价 & 生成订单号
         int total = product.getPrice() * quantity;
+        String orderNo = generateOrderNo();
 
-        // 3. 扣余额，余额不足 → 回滚库存
+        // 3. 扣余额（余额不足 → 回滚库存）
         try {
-            userService.deductBalance(buyerId, total);
+            userService.deductBalance(buyerId, total, "PAY", orderNo,
+                    "订单消费：" + product.getName() + " x" + quantity);
         } catch (BusinessException e) {
             productService.rollbackStock(productId, quantity);
             throw e;
@@ -64,9 +66,9 @@ public class OrderService {
         o.setProductId(productId);
         o.setQuantity(quantity);
         o.setTotalAmount(total);
-        o.setShippingAddress(shippingAddress);
-        o.setStatus("PAID"); // 余额扣款即视为已支付
-        o.setOrderNo(generateOrderNo());
+        o.setShippingAddress(shippingAddress.trim());
+        o.setStatus("PAID");
+        o.setOrderNo(orderNo);
         o.setPaidAt(System.currentTimeMillis());
         return orderDao.save(o);
     }
@@ -100,12 +102,38 @@ public class OrderService {
             User op = userService.getById(operatorId);
             if (!"ADMIN".equals(op.getRole())) throw new BusinessException(403, "无取消权限");
         }
-        // 已付款则退款（余额+库存回滚）
+        // 已付款则退款（余额+库存回滚，写 CANCEL_REFUND 流水）
         if ("PAID".equals(o.getStatus())) {
             productService.rollbackStock(o.getProductId(), o.getQuantity());
-            userService.recharge(o.getBuyerId(), o.getTotalAmount());
+            userService.recharge(o.getBuyerId(), o.getTotalAmount(),
+                    "CANCEL_REFUND", o.getOrderNo(), "取消订单退款");
         }
         o.setStatus("CANCELLED");
+        return orderDao.save(o);
+    }
+
+    /**
+     * 订单退款（售后：PAID/SHIPPED/COMPLETED 均可申请）
+     * 规则：买家本人 或 管理员 操作；回滚库存 + 退买家余额（REFUND 流水）+ 订单置 REFUNDED
+     */
+    public Order refund(Long orderId, Long operatorId) {
+        Order o = getById(orderId);
+        String s = o.getStatus();
+        if (!("PAID".equals(s) || "SHIPPED".equals(s) || "COMPLETED".equals(s))) {
+            throw new BusinessException("当前订单状态不可退款");
+        }
+        // 权限：买家本人 或 ADMIN
+        if (!operatorId.equals(o.getBuyerId())) {
+            User op = userService.getById(operatorId);
+            if (!"ADMIN".equals(op.getRole())) throw new BusinessException(403, "无退款权限");
+        }
+        // 回库存（COMPLETED/SHIPPED/PAID 都回）
+        productService.rollbackStock(o.getProductId(), o.getQuantity());
+        // 退买家余额（写 REFUND 流水 + 关联订单号）
+        userService.recharge(o.getBuyerId(), o.getTotalAmount(),
+                "REFUND", o.getOrderNo(), "订单售后退款");
+        o.setStatus("REFUNDED");
+        o.setRefundedAt(System.currentTimeMillis());
         return orderDao.save(o);
     }
 

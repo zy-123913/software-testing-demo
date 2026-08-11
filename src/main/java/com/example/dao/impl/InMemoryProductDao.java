@@ -46,6 +46,28 @@ public class InMemoryProductDao implements ProductDao {
     }
 
     @Override
+    public Optional<Product> findBySellerIdAndNameIgnoreCase(Long sellerId, String name) {
+        if (sellerId == null || name == null) return Optional.empty();
+        final String key = name.trim().toLowerCase(Locale.ROOT);
+        return store.values().stream()
+                .filter(p -> sellerId.equals(p.getSellerId()))
+                .filter(p -> p.getName() != null && key.equals(p.getName().trim().toLowerCase(Locale.ROOT)))
+                .findFirst();
+    }
+
+    @Override
+    public List<Product> search(String keyword, String category, Long sellerId) {
+        final String kw = (keyword == null) ? null : keyword.trim().toLowerCase(Locale.ROOT);
+        return store.values().stream()
+                .filter(p -> category == null || category.isEmpty() || category.equals(p.getCategory()))
+                .filter(p -> sellerId == null || sellerId.equals(p.getSellerId()))
+                .filter(p -> kw == null || kw.isEmpty()
+                        || (p.getName() != null && p.getName().toLowerCase(Locale.ROOT).contains(kw)))
+                .sorted(Comparator.comparing(Product::getId).reversed())
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public boolean deleteById(Long id) {
         return store.remove(id) != null;
     }

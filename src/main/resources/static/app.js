@@ -157,6 +157,9 @@ async function loadUserList() {
     if (!document.getElementById('bizuser-recharge-id').value && buyer) {
         document.getElementById('bizuser-recharge-id').value = buyer.id;
     }
+    if (!document.getElementById('txlog-userid').value && buyer) {
+        document.getElementById('txlog-userid').value = buyer.id;
+    }
     renderTable('#bizuser-table tbody', list, [
         { key: 'id' },
         { key: 'username' },
@@ -197,6 +200,33 @@ document.getElementById('bizuser-recharge').addEventListener('click', async () =
     const data = await api(`/biz/user/recharge?${qs}`, { method: 'POST' });
     showResult(document.getElementById('bizuser-recharge-result'), data);
     if (data.code === 200) await loadUserList();
+});
+
+// ---- 账户交易流水 ----
+document.getElementById('txlog-query').addEventListener('click', async () => {
+    const uid = document.getElementById('txlog-userid').value;
+    if (!uid) {
+        const el = document.getElementById('txlog-result');
+        el.classList.remove('ok'); el.classList.add('err');
+        el.textContent = '请先输入用户ID';
+        return;
+    }
+    const data = await api(`/biz/user/transactions?userId=${uid}`);
+    showResult(document.getElementById('txlog-result'), data);
+    const list = (data && data.code === 200 && data.data) ? data.data : [];
+    document.getElementById('txlog-count').textContent = `共 ${list.length} 条`;
+    renderTable('#txlog-table tbody', list, [
+        { key: 'id' },
+        { render: r => `<span class="status-tag tx-${r.type}">${r.type || '-'}</span>` },
+        { render: r => {
+            const a = r.amount || 0;
+            return `<b style="color:${a >= 0 ? '#059669' : '#dc2626'}">${a >= 0 ? '+' : ''}${fen2yuan(a)}</b>`;
+        }},
+        { render: r => `<b>¥${fen2yuan(r.balanceAfter)}</b>` },
+        { key: 'refNo', render: r => r.refNo || '-' },
+        { key: 'remark', render: r => r.remark || '-' },
+        { key: 'createdAt' }
+    ]);
 });
 
 // ---- 商品管理 ----
@@ -243,6 +273,37 @@ document.getElementById('bizprod-create').addEventListener('click', async () => 
     if (data.code === 200) await loadProductList();
 });
 
+// ---- 商品搜索分页 ----
+document.getElementById('prodsearch-btn').addEventListener('click', async () => {
+    const qs = new URLSearchParams({
+        keyword: document.getElementById('prodsearch-kw').value || '',
+        category: document.getElementById('prodsearch-cat').value || '',
+        page: document.getElementById('prodsearch-page').value || '1',
+        size: document.getElementById('prodsearch-size').value || '10'
+    }).toString();
+    const data = await api(`/biz/product/search?${qs}`);
+    showResult(document.getElementById('prodsearch-result'), data);
+    const ok = data && data.code === 200 && data.data;
+    const list = ok ? data.data.list || [] : [];
+    const total = ok ? (data.data.total || 0) : 0;
+    const page = ok ? (data.data.page || 1) : 1;
+    const tp = ok ? (data.data.totalPages || 0) : 0;
+    document.getElementById('prodsearch-info').textContent = `共 ${total} 条 / 第 ${page} 页 / 共 ${tp} 页`;
+    renderTable('#prodsearch-table tbody', list, [
+        { key: 'id' },
+        { key: 'name' },
+        { key: 'category' },
+        { render: r => `<b>¥${fen2yuan(r.price)}</b>` },
+        { render: r => {
+            const s = r.stock || 0;
+            const cls = s === 0 ? 'color:#dc2626;font-weight:700' : (s < 10 ? 'color:#d97706;font-weight:700' : '');
+            return `<span style="${cls}">${s}</span>`;
+        }},
+        { key: 'sellerId' },
+        { render: r => `<span class="status-tag status-${r.status}">${r.status}</span>` }
+    ]);
+});
+
 // ---- 订单交易 ----
 async function loadOrderList(status) {
     const url = status
@@ -261,6 +322,7 @@ async function loadOrderList(status) {
         { render: r => `<b>¥${fen2yuan(r.totalAmount)}</b>` },
         { render: r => `<span class="status-tag status-${r.status}">${r.status}</span>` },
         { key: 'address' },
+        { render: r => r.refundedAt ? r.refundedAt : '-' },
         { key: 'createdAt' }
     ]);
     return list;

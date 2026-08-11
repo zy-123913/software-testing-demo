@@ -43,11 +43,12 @@ public class WebApplication {
     private final StringUtils stringUtils = new StringUtils();
     private final UserValidator userValidator = new UserValidator();
 
-    // ====== 电商业务三层架构（订单 / 商品 / 用户） ======
+    // ====== 电商业务三层架构（订单 / 商品 / 用户 / 流水） ======
     private final com.example.dao.UserDao userDao = new com.example.dao.impl.InMemoryUserDao();
     private final com.example.dao.ProductDao productDao = new com.example.dao.impl.InMemoryProductDao();
     private final com.example.dao.OrderDao orderDao = new com.example.dao.impl.InMemoryOrderDao();
-    private final com.example.service.UserService userService = new com.example.service.UserService(userDao);
+    private final com.example.dao.TransactionLogDao txLogDao = new com.example.dao.impl.InMemoryTransactionLogDao();
+    private final com.example.service.UserService userService = new com.example.service.UserService(userDao, txLogDao);
     private final com.example.service.ProductService productService = new com.example.service.ProductService(productDao);
     private final com.example.service.OrderService orderService = new com.example.service.OrderService(orderDao, userService, productService);
 
@@ -96,22 +97,25 @@ public class WebApplication {
         server.createContext("/api/login", new LoginHandler());
         server.createContext("/api/permission", new PermissionHandler());
 
-        // ====== 电商业务 REST API（用户/商品/订单 CRUD） ======
-        server.createContext("/biz/user/list",     new BizUserHandler("list"));
-        server.createContext("/biz/user/get",      new BizUserHandler("get"));
-        server.createContext("/biz/user/register", new BizUserHandler("register"));
-        server.createContext("/biz/user/login",    new BizUserHandler("login"));
-        server.createContext("/biz/user/recharge", new BizUserHandler("recharge"));
-        server.createContext("/biz/product/list",  new BizProductHandler("list"));
-        server.createContext("/biz/product/get",   new BizProductHandler("get"));
-        server.createContext("/biz/product/create",new BizProductHandler("create"));
-        server.createContext("/biz/order/create",  new BizOrderHandler("create"));
-        server.createContext("/biz/order/ship",    new BizOrderHandler("ship"));
-        server.createContext("/biz/order/complete",new BizOrderHandler("complete"));
-        server.createContext("/biz/order/cancel",  new BizOrderHandler("cancel"));
-        server.createContext("/biz/order/list",    new BizOrderHandler("list"));
-        server.createContext("/biz/order/get",     new BizOrderHandler("get"));
-        server.createContext("/biz/init",          new BizInitHandler());
+        // ====== 电商业务 REST API（用户/商品/订单 CRUD + 搜索/退款/流水） ======
+        server.createContext("/biz/user/list",        new BizUserHandler("list"));
+        server.createContext("/biz/user/get",         new BizUserHandler("get"));
+        server.createContext("/biz/user/register",    new BizUserHandler("register"));
+        server.createContext("/biz/user/login",       new BizUserHandler("login"));
+        server.createContext("/biz/user/recharge",    new BizUserHandler("recharge"));
+        server.createContext("/biz/user/transactions",new BizUserHandler("transactions"));
+        server.createContext("/biz/product/list",     new BizProductHandler("list"));
+        server.createContext("/biz/product/get",      new BizProductHandler("get"));
+        server.createContext("/biz/product/create",   new BizProductHandler("create"));
+        server.createContext("/biz/product/search",   new BizProductHandler("search"));
+        server.createContext("/biz/order/create",     new BizOrderHandler("create"));
+        server.createContext("/biz/order/ship",       new BizOrderHandler("ship"));
+        server.createContext("/biz/order/complete",   new BizOrderHandler("complete"));
+        server.createContext("/biz/order/cancel",     new BizOrderHandler("cancel"));
+        server.createContext("/biz/order/refund",     new BizOrderHandler("refund"));
+        server.createContext("/biz/order/list",       new BizOrderHandler("list"));
+        server.createContext("/biz/order/get",        new BizOrderHandler("get"));
+        server.createContext("/biz/init",             new BizInitHandler());
 
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(64));
         server.start();
@@ -545,11 +549,12 @@ public class WebApplication {
         protected void doHandle(HttpExchange ex, Map<String, String> p) throws Exception {
             Object result;
             switch (action) {
-                case "list":     result = userService.listAll(); break;
-                case "get":      result = userService.getById(Long.valueOf(p.get("id"))); break;
-                case "register": result = userService.register(p.get("username"), p.get("password"), p.get("email"), p.getOrDefault("role", "BUYER")); break;
-                case "login":    result = userService.login(p.get("username"), p.get("password")); break;
-                case "recharge": result = userService.recharge(Long.valueOf(p.get("userId")), Integer.parseInt(p.get("amount"))); break;
+                case "list":         result = userService.listAll(); break;
+                case "get":          result = userService.getById(Long.valueOf(p.get("id"))); break;
+                case "register":     result = userService.register(p.get("username"), p.get("password"), p.get("email"), p.getOrDefault("role", "BUYER")); break;
+                case "login":        result = userService.login(p.get("username"), p.get("password")); break;
+                case "recharge":     result = userService.recharge(Long.valueOf(p.get("userId")), Integer.parseInt(p.get("amount"))); break;
+                case "transactions": result = userService.listTransactions(Long.valueOf(p.get("userId"))); break;
                 default: throw new com.example.common.BusinessException(404, "未知操作");
             }
             sendJson(ex, 200, ok(result));
@@ -576,6 +581,16 @@ public class WebApplication {
                         p.get("category"),
                         Long.valueOf(p.get("sellerId")));
                     break;
+                case "search": {
+                    String kw = p.get("keyword");
+                    String cat = p.get("category");
+                    String sid = p.get("sellerId");
+                    Long sellerId = (sid == null || sid.isEmpty()) ? null : Long.valueOf(sid);
+                    int page = Integer.parseInt(p.getOrDefault("page", "1"));
+                    int size = Integer.parseInt(p.getOrDefault("size", "10"));
+                    result = productService.search(kw, cat, sellerId, page, size);
+                    break;
+                }
                 default: throw new com.example.common.BusinessException(404, "未知操作");
             }
             sendJson(ex, 200, ok(result));
@@ -599,6 +614,7 @@ public class WebApplication {
                 case "ship":     result = orderService.ship(Long.valueOf(p.get("orderId")), Long.valueOf(p.get("sellerId"))); break;
                 case "complete": result = orderService.complete(Long.valueOf(p.get("orderId")), Long.valueOf(p.get("buyerId"))); break;
                 case "cancel":   result = orderService.cancel(Long.valueOf(p.get("orderId")), Long.valueOf(p.get("operatorId"))); break;
+                case "refund":   result = orderService.refund(Long.valueOf(p.get("orderId")), Long.valueOf(p.get("operatorId"))); break;
                 case "list":
                     if (p.containsKey("buyerId")) result = orderService.listByBuyer(Long.valueOf(p.get("buyerId")));
                     else if (p.containsKey("status")) result = orderService.listByStatus(p.get("status"));

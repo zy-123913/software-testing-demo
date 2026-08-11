@@ -269,4 +269,115 @@ class OrderServiceTest {
             assertEquals("CANCELLED", r.getStatus());
         }
     }
+
+    // ====== 订单售后退款 ======
+    @Nested
+    @DisplayName("订单售后退款")
+    class Refund {
+
+        private User anotherBuyer;
+
+        @BeforeEach
+        void setUp() {
+            anotherBuyer = new User(3L, "buyer02", "Buyer123", "b2@x.com", "BUYER");
+            anotherBuyer.setStatus(1);
+            when(userDao.findById(3L)).thenReturn(Optional.of(anotherBuyer));
+            when(userDao.save(any(User.class))).thenReturn(buyer);
+        }
+
+        @Test
+        @DisplayName("PAID 买家本人退款成功：状态→REFUNDED，refundedAt非空，回库存+退余额+保存订单各1次")
+        void refundPaidByBuyerSuccess() {
+            Order o = new Order();
+            o.setId(3001L);
+            o.setBuyerId(1L);
+            o.setProductId(100L);
+            o.setQuantity(1);
+            o.setTotalAmount(699_900);
+            o.setStatus("PAID");
+            o.setOrderNo("NO20250101000001");
+            when(orderDao.findById(3001L)).thenReturn(Optional.of(o));
+            when(orderDao.save(any(Order.class))).thenReturn(o);
+
+            Order r = orderService.refund(3001L, 1L);
+
+            assertEquals("REFUNDED", r.getStatus());
+            assertNotNull(r.getRefundedAt());
+            verify(productDao, times(1)).rollbackStock(100L, 1);
+            verify(userDao, times(1)).save(any(User.class));
+            verify(orderDao, times(1)).save(any(Order.class));
+        }
+
+        @Test
+        @DisplayName("SHIPPED 买家退款成功")
+        void refundShippedByBuyerSuccess() {
+            Order o = new Order();
+            o.setId(3002L);
+            o.setBuyerId(1L);
+            o.setProductId(100L);
+            o.setQuantity(1);
+            o.setTotalAmount(699_900);
+            o.setStatus("SHIPPED");
+            o.setOrderNo("NO20250101000002");
+            when(orderDao.findById(3002L)).thenReturn(Optional.of(o));
+            when(orderDao.save(any(Order.class))).thenReturn(o);
+
+            Order r = orderService.refund(3002L, 1L);
+
+            assertEquals("REFUNDED", r.getStatus());
+            assertNotNull(r.getRefundedAt());
+            verify(productDao, times(1)).rollbackStock(100L, 1);
+            verify(userDao, times(1)).save(any(User.class));
+            verify(orderDao, times(1)).save(any(Order.class));
+        }
+
+        @Test
+        @DisplayName("COMPLETED 管理员退款成功")
+        void refundCompletedByAdminSuccess() {
+            Order o = new Order();
+            o.setId(3003L);
+            o.setBuyerId(1L);
+            o.setProductId(100L);
+            o.setQuantity(1);
+            o.setTotalAmount(699_900);
+            o.setStatus("COMPLETED");
+            o.setOrderNo("NO20250101000003");
+            when(orderDao.findById(3003L)).thenReturn(Optional.of(o));
+            when(orderDao.save(any(Order.class))).thenReturn(o);
+
+            Order r = orderService.refund(3003L, 9L);
+
+            assertEquals("REFUNDED", r.getStatus());
+            assertNotNull(r.getRefundedAt());
+            verify(productDao, times(1)).rollbackStock(100L, 1);
+            verify(userDao, times(1)).save(any(User.class));
+            verify(orderDao, times(1)).save(any(Order.class));
+        }
+
+        @Test
+        @DisplayName("CANCELLED 状态不可退款，抛异常")
+        void refundCancelledFails() {
+            Order o = new Order();
+            o.setId(3004L);
+            o.setBuyerId(1L);
+            o.setStatus("CANCELLED");
+            when(orderDao.findById(3004L)).thenReturn(Optional.of(o));
+
+            assertThrows(BusinessException.class, () -> orderService.refund(3004L, 1L));
+        }
+
+        @Test
+        @DisplayName("非买家非管理员（另一个BUYER）退款，403 抛异常")
+        void refundByOtherBuyerFails403() {
+            Order o = new Order();
+            o.setId(3005L);
+            o.setBuyerId(1L);
+            o.setStatus("PAID");
+            when(orderDao.findById(3005L)).thenReturn(Optional.of(o));
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> orderService.refund(3005L, 3L));
+            assertEquals(403, ex.getCode());
+        }
+    }
 }

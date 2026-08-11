@@ -11,6 +11,8 @@ public interface UserDao {
     User save(User user);
     Optional<User> findById(Long id);
     Optional<User> findByUsername(String username);
+    /** 用户名忽略大小写查重 */
+    Optional<User> findByUsernameIgnoreCase(String username);
     List<User> findAll();
     boolean deleteById(Long id);
     List<User> findByRole(String role);

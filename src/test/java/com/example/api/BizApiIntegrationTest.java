@@ -165,6 +165,66 @@ class BizApiIntegrationTest {
                     .statusCode(200)
                     .body("data.size()", greaterThanOrEqualTo(3));
         }
+
+        @Test
+        @Order(6)
+        @Story("充值写入交易记录")
+        @Severity(SeverityLevel.CRITICAL)
+        void rechargeWritesTx() {
+            given().port(server.getPort())
+                    .basePath("/biz/user/recharge")
+                    .queryParam("userId", buyerId)
+                    .queryParam("amount", 10000)
+                    .when().post()
+                    .then()
+                    .statusCode(200)
+                    .body("code", equalTo(200));
+            String body = given().port(server.getPort())
+                    .basePath("/biz/user/transactions")
+                    .queryParam("userId", buyerId)
+                    .when().get()
+                    .then()
+                    .statusCode(200)
+                    .body("code", equalTo(200))
+                    .extract().asString();
+            Map<String, Object> resp = toMap(body);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> txList = (List<Map<String, Object>>) resp.get("data");
+            Assertions.assertNotNull(txList, "data 应为 List");
+            Assertions.assertTrue(txList instanceof java.util.List, "data 应是 List");
+            boolean found = false;
+            for (Map<String, Object> tx : txList) {
+                int amt = ((Number) tx.get("amount")).intValue();
+                String type = String.valueOf(tx.get("type"));
+                if (amt == 10000 || ("RECHARGE".equals(type) && amt > 0)) {
+                    found = true;
+                    break;
+                }
+            }
+            Assertions.assertTrue(found, "至少存在一条 amount=10000 或 (type=RECHARGE 且 amount>0) 的交易记录");
+        }
+
+        @Test
+        @Order(7)
+        @Story("查询不存在用户的交易记录")
+        @Severity(SeverityLevel.NORMAL)
+        void transactionsInvalidUser() {
+            io.restassured.response.Response resp = given().port(server.getPort())
+                    .basePath("/biz/user/transactions")
+                    .queryParam("userId", 99999)
+                    .when().get()
+                    .then()
+                    .extract().response();
+            int sc = resp.statusCode();
+            if (sc == 404) {
+                return;
+            }
+            String body = resp.asString();
+            Map<String, Object> bodyMap = toMap(body);
+            Object code = bodyMap.get("code");
+            Assertions.assertTrue(sc == 404 || (code != null && ((Number) code).intValue() == 404),
+                    "状态码或 body.code 任一为 404，实际 statusCode=" + sc + ", code=" + code);
+        }
     }
 
     // ====== 商品模块 ======
@@ -220,6 +280,88 @@ class BizApiIntegrationTest {
                     .then()
                     .statusCode(400)
                     .body("message", containsString("价格"));
+        }
+
+        @Test
+        @Order(13)
+        @Story("商品关键词搜索")
+        @Severity(SeverityLevel.NORMAL)
+        void searchKeyword() {
+            String body = given().port(server.getPort())
+                    .basePath("/biz/product/search")
+                    .queryParam("keyword", "iPhone")
+                    .when().get()
+                    .then()
+                    .statusCode(200)
+                    .body("code", equalTo(200))
+                    .body("data.total", greaterThanOrEqualTo(1))
+                    .body("data.page", equalTo(1))
+                    .body("data.size", equalTo(10))
+                    .body("data.totalPages", greaterThanOrEqualTo(1))
+                    .extract().asString();
+            Map<String, Object> resp = toMap(body);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) resp.get("data");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> list = (List<Map<String, Object>>) data.get("list");
+            for (Map<String, Object> item : list) {
+                String name = String.valueOf(item.get("name"));
+                Assertions.assertTrue(name.toLowerCase().contains("iphone".toLowerCase()),
+                        "商品名 " + name + " 应包含 iPhone (大小写不敏感)");
+            }
+        }
+
+        @Test
+        @Order(14)
+        @Story("按分类分页搜索商品")
+        @Severity(SeverityLevel.NORMAL)
+        void searchCategoryAndPage() {
+            String body = given().port(server.getPort())
+                    .basePath("/biz/product/search")
+                    .queryParam("category", "电子产品")
+                    .queryParam("page", 1)
+                    .queryParam("size", 2)
+                    .when().get()
+                    .then()
+                    .statusCode(200)
+                    .body("code", equalTo(200))
+                    .extract().asString();
+            Map<String, Object> resp = toMap(body);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) resp.get("data");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> list = (List<Map<String, Object>>) data.get("list");
+            Assertions.assertNotNull(list, "data.list 不应为 null");
+            Assertions.assertTrue(list instanceof java.util.List, "data.list 应是 List");
+            Assertions.assertTrue(list.size() <= 2, "list.size() 应 <= 2，实际: " + list.size());
+            for (Map<String, Object> item : list) {
+                Assertions.assertEquals("电子产品", item.get("category"),
+                        "每条商品 category 应为 电子产品");
+            }
+        }
+
+        @Test
+        @Order(15)
+        @Story("空关键词搜索商品")
+        @Severity(SeverityLevel.MINOR)
+        void searchEmptyKeyword() {
+            String body = given().port(server.getPort())
+                    .basePath("/biz/product/search")
+                    .queryParam("keyword", "")
+                    .queryParam("size", 100)
+                    .when().get()
+                    .then()
+                    .statusCode(200)
+                    .body("code", equalTo(200))
+                    .extract().asString();
+            Map<String, Object> resp = toMap(body);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) resp.get("data");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> list = (List<Map<String, Object>>) data.get("list");
+            int total = ((Number) data.get("total")).intValue();
+            Assertions.assertTrue(total >= list.size(),
+                    "total(" + total + ") 应 >= list.size(" + list.size() + ")");
         }
     }
 
@@ -439,6 +581,85 @@ class BizApiIntegrationTest {
                     .then()
                     .statusCode(200)
                     .body("data", instanceOf(java.util.List.class));
+        }
+
+        @Test
+        @Order(30)
+        @Story("已支付订单买家申请退款")
+        @Severity(SeverityLevel.CRITICAL)
+        void refundAfterPaid() {
+            given().port(server.getPort())
+                    .basePath("/biz/user/recharge")
+                    .queryParam("userId", buyerId)
+                    .queryParam("amount", 1_000_000)
+                    .when().post();
+            Long pid = firstProductId();
+            Long localOrderId = ((Number) given().port(server.getPort())
+                    .basePath("/biz/order/create")
+                    .queryParam("buyerId", buyerId)
+                    .queryParam("productId", pid)
+                    .queryParam("quantity", 1)
+                    .queryParam("address", "退款测试地址")
+                    .when().post()
+                    .then().statusCode(200).extract().path("data.id")).longValue();
+            given().port(server.getPort())
+                    .basePath("/biz/order/refund")
+                    .queryParam("orderId", localOrderId)
+                    .queryParam("operatorId", buyerId)
+                    .when().post()
+                    .then()
+                    .statusCode(200)
+                    .body("code", equalTo(200))
+                    .body("data.status", equalTo("REFUNDED"))
+                    .body("data.refundedAt", notNullValue());
+        }
+
+        @Test
+        @Order(31)
+        @Story("管理员为已完成订单退款")
+        @Severity(SeverityLevel.CRITICAL)
+        void refundByAdminForCompleted() {
+            given().port(server.getPort())
+                    .basePath("/biz/user/recharge")
+                    .queryParam("userId", buyerId)
+                    .queryParam("amount", 1_000_000)
+                    .when().post();
+            Long pid = firstProductId();
+            Long localOrderId = ((Number) given().port(server.getPort())
+                    .basePath("/biz/order/create")
+                    .queryParam("buyerId", buyerId)
+                    .queryParam("productId", pid)
+                    .queryParam("quantity", 1)
+                    .queryParam("address", "管理员退款测试地址")
+                    .when().post()
+                    .then().statusCode(200).extract().path("data.id")).longValue();
+            given().port(server.getPort())
+                    .basePath("/biz/order/ship")
+                    .queryParam("orderId", localOrderId)
+                    .queryParam("sellerId", sellerId)
+                    .when().post()
+                    .then().statusCode(200);
+            given().port(server.getPort())
+                    .basePath("/biz/order/complete")
+                    .queryParam("orderId", localOrderId)
+                    .queryParam("buyerId", buyerId)
+                    .when().post()
+                    .then().statusCode(200);
+            String userListJson = given().port(server.getPort()).get("/biz/user/list").asString();
+            Map<String, Object> userListResp = toMap(userListJson);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> allUsers = (List<Map<String, Object>>) userListResp.get("data");
+            Long adminId = idOf(allUsers.stream().filter(u -> "ADMIN".equals(u.get("role")))
+                    .findFirst().get());
+            given().port(server.getPort())
+                    .basePath("/biz/order/refund")
+                    .queryParam("orderId", localOrderId)
+                    .queryParam("operatorId", adminId)
+                    .when().post()
+                    .then()
+                    .statusCode(200)
+                    .body("code", equalTo(200))
+                    .body("data.status", equalTo("REFUNDED"));
         }
     }
 }

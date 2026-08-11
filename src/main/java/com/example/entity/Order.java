@@ -17,6 +17,7 @@ public class Order {
     private Long paidAt;
     private Long shippedAt;
     private Long completedAt;
+    private Long refundedAt;
     private Long createdAt;
     private Long updatedAt;
 
@@ -44,6 +45,8 @@ public class Order {
     public void setShippedAt(Long shippedAt) { this.shippedAt = shippedAt; touch(); }
     public Long getCompletedAt() { return completedAt; }
     public void setCompletedAt(Long completedAt) { this.completedAt = completedAt; touch(); }
+    public Long getRefundedAt() { return refundedAt; }
+    public void setRefundedAt(Long refundedAt) { this.refundedAt = refundedAt; touch(); }
     public Long getCreatedAt() { return createdAt; }
     public void setCreatedAt(Long createdAt) { this.createdAt = createdAt; }
     public Long getUpdatedAt() { return updatedAt; }

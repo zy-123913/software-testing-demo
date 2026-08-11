@@ -75,9 +75,15 @@ const UserValidator = {
 
 // ====== 电商业务模拟（Entity/DAO/Service 三层逻辑纯 JS 复刻） ======
 const BizStore = (() => {
-    let users = [], products = [], orders = [];
-    let uidSeq = 0, pidSeq = 0, oidSeq = 0;
+    let users = [], products = [], orders = [], transactions = [];
+    let uidSeq = 0, pidSeq = 0, oidSeq = 0, txSeq = 0;
     const nowStr = () => new Date().toLocaleString('zh-CN', { hour12: false });
+    function addTx(userId, type, amount, balanceAfter, refNo, remark) {
+        transactions.push({
+            id: ++txSeq, userId, type, amount, balanceAfter,
+            refNo: refNo || null, remark: remark || null, createdAt: nowStr()
+        });
+    }
 
     function initDemoData() {
         if (users.length > 0) return { userCount: users.length, productCount: products.length, orderCount: orders.length };
@@ -111,7 +117,12 @@ const BizStore = (() => {
         if (!u) throw new Error('用户不存在');
         if (amountFen <= 0) throw new Error('充值金额必须大于0');
         u.balance += amountFen;
+        addTx(userId, 'RECHARGE', amountFen, u.balance, null, '账户充值');
         return { id: u.id, balance: u.balance };
+    }
+    function listTransactions(userId) {
+        const uid = parseInt(userId, 10);
+        return transactions.filter(t => t.userId === uid).slice().reverse();
     }
     function listUsers() { return users.map(({ password, ...rest }) => rest); }
 
@@ -128,6 +139,20 @@ const BizStore = (() => {
     }
     function listProducts(category) {
         return category ? products.filter(p => p.category === category) : products.slice();
+    }
+    function searchProducts(keyword, category, sellerId, page, size) {
+        let list = products.slice();
+        const kw = (keyword || '').trim().toLowerCase();
+        if (kw) list = list.filter(p => p.name.toLowerCase().includes(kw));
+        if (category) list = list.filter(p => p.category === category);
+        const sid = sellerId ? parseInt(sellerId, 10) : 0;
+        if (sid) list = list.filter(p => p.sellerId === sid);
+        const total = list.length;
+        const p = Math.max(1, parseInt(page, 10) || 1);
+        const s = Math.min(100, Math.max(1, parseInt(size, 10) || 10));
+        const totalPages = Math.max(0, Math.ceil(total / s));
+        const start = (p - 1) * s;
+        return { total, list: list.slice(start, start + s), page: p, size: s, totalPages };
     }
 
     function createOrder(buyerId, productId, quantity, address) {
@@ -150,6 +175,8 @@ const BizStore = (() => {
             totalAmount: total, status: 'PAID', address, createdAt: nowStr()
         };
         orders.push(o);
+        addTx(buyerId, 'PAY', -total, buyer.balance, 'O' + o.id, '订单支付');
+        if (seller) addTx(seller.id, 'INCOME', total, seller.balance, 'O' + o.id, '订单收入');
         return o;
     }
     function shipOrder(orderId, sellerId) {
@@ -179,11 +206,50 @@ const BizStore = (() => {
         }
         if (o.status === 'PAID' || o.status === 'SHIPPED') {
             const buyer = users.find(x => x.id === o.buyerId);
-            if (buyer) buyer.balance += o.totalAmount; // 退款
+            if (buyer) {
+                buyer.balance += o.totalAmount; // 退款
+                addTx(buyer.id, 'CANCEL_REFUND', o.totalAmount, buyer.balance, 'O' + o.id, '订单取消退款');
+            }
+            const seller = users.find(x => {
+                const prod = products.find(p => p.id === o.productId);
+                return prod && x.id === prod.sellerId;
+            });
+            if (seller) {
+                seller.balance -= o.totalAmount;
+                addTx(seller.id, 'CANCEL_DEDUCT', -o.totalAmount, seller.balance, 'O' + o.id, '订单取消扣回');
+            }
             const prod = products.find(x => x.id === o.productId);
             if (prod) prod.stock += o.quantity; // 恢复库存
         }
         o.status = 'CANCELLED';
+        return o;
+    }
+    function refundOrder(orderId, operatorId) {
+        const o = orders.find(x => x.id === orderId);
+        if (!o) throw new Error('订单不存在');
+        if (o.status !== 'COMPLETED' && o.status !== 'PAID' && o.status !== 'SHIPPED')
+            throw new Error('订单状态不合法，当前状态：' + o.status);
+        if (o.status === 'REFUNDED') throw new Error('订单已退款，不可重复操作');
+        const op = users.find(x => x.id === operatorId);
+        if (!op) throw new Error('操作人不存在');
+        if (op.role !== 'ADMIN' && o.buyerId !== operatorId)
+            throw new Error('无权操作：仅买家本人或管理员可退款');
+        const buyer = users.find(x => x.id === o.buyerId);
+        const prod = products.find(x => x.id === o.productId);
+        const seller = prod ? users.find(x => x.id === prod.sellerId) : null;
+        if (buyer) {
+            buyer.balance += o.totalAmount;
+            addTx(buyer.id, 'REFUND', o.totalAmount, buyer.balance, 'O' + o.id, '售后退款');
+        }
+        if (seller) {
+            seller.balance -= o.totalAmount;
+            addTx(seller.id, 'REFUND_DEDUCT', -o.totalAmount, seller.balance, 'O' + o.id, '售后退款扣回');
+        }
+        if (prod && o.status !== 'COMPLETED') {
+            prod.stock += o.quantity;
+        }
+        o.status = 'REFUNDED';
+        o.refundedAt = nowStr();
         return o;
     }
     function listOrders(filter) {
@@ -194,9 +260,9 @@ const BizStore = (() => {
 
     return {
         initDemoData,
-        register, login, recharge, listUsers,
-        createProduct, listProducts,
-        createOrder, shipOrder, completeOrder, cancelOrder, listOrders
+        register, login, recharge, listUsers, listTransactions,
+        createProduct, listProducts, searchProducts,
+        createOrder, shipOrder, completeOrder, cancelOrder, refundOrder, listOrders
     };
 })();
 
@@ -325,6 +391,9 @@ async function loadUserList() {
     if (!document.getElementById('bizuser-recharge-id').value && buyer) {
         document.getElementById('bizuser-recharge-id').value = buyer.id;
     }
+    if (!document.getElementById('txlog-userid').value && buyer) {
+        document.getElementById('txlog-userid').value = buyer.id;
+    }
     renderTable('#bizuser-table tbody', list, [
         { key: 'id' },
         { key: 'username' },
@@ -371,6 +440,7 @@ async function loadOrderList(status) {
         { render: r => `<b>¥${fen2yuan(r.totalAmount)}</b>` },
         { render: r => `<span class="status-tag status-${r.status}">${r.status}</span>` },
         { key: 'address' },
+        { render: r => r.refundedAt ? r.refundedAt : '-' },
         { key: 'createdAt' }
     ]);
     return list;
@@ -425,6 +495,36 @@ document.getElementById('bizuser-recharge').addEventListener('click', () => {
     }
 });
 
+// ---- 账户交易流水 ----
+document.getElementById('txlog-query').addEventListener('click', () => {
+    try {
+        const uid = document.getElementById('txlog-userid').value;
+        if (!uid) {
+            const el = document.getElementById('txlog-result');
+            el.classList.remove('ok'); el.classList.add('err');
+            el.textContent = '请先输入用户ID';
+            return;
+        }
+        const list = BizStore.listTransactions(uid);
+        showResult(document.getElementById('txlog-result'), { code: 200, data: list });
+        document.getElementById('txlog-count').textContent = `共 ${list.length} 条`;
+        renderTable('#txlog-table tbody', list, [
+            { key: 'id' },
+            { render: r => `<span class="status-tag tx-${r.type}">${r.type || '-'}</span>` },
+            { render: r => {
+                const a = r.amount || 0;
+                return `<b style="color:${a >= 0 ? '#059669' : '#dc2626'}">${a >= 0 ? '+' : ''}${fen2yuan(a)}</b>`;
+            }},
+            { render: r => `<b>¥${fen2yuan(r.balanceAfter)}</b>` },
+            { key: 'refNo', render: r => r.refNo || '-' },
+            { key: 'remark', render: r => r.remark || '-' },
+            { key: 'createdAt' }
+        ]);
+    } catch (e) {
+        showResult(document.getElementById('txlog-result'), { code: 400, message: e.message });
+    }
+});
+
 document.getElementById('bizprod-refresh').addEventListener('click', () => loadProductList());
 document.getElementById('bizprod-filter-btn').addEventListener('click', () => {
     loadProductList(document.getElementById('bizprod-category-filter').value);
@@ -441,6 +541,38 @@ document.getElementById('bizprod-create').addEventListener('click', () => {
         loadProductList();
     } catch (e) {
         showResult(document.getElementById('bizprod-create-result'), { code: 400, message: e.message });
+    }
+});
+
+// ---- 商品搜索分页 ----
+document.getElementById('prodsearch-btn').addEventListener('click', () => {
+    try {
+        const result = BizStore.searchProducts(
+            document.getElementById('prodsearch-kw').value || '',
+            document.getElementById('prodsearch-cat').value || '',
+            '',
+            document.getElementById('prodsearch-page').value || '1',
+            document.getElementById('prodsearch-size').value || '10'
+        );
+        showResult(document.getElementById('prodsearch-result'), { code: 200, data: result });
+        const list = result.list || [];
+        document.getElementById('prodsearch-info').textContent =
+            `共 ${result.total} 条 / 第 ${result.page} 页 / 共 ${result.totalPages} 页`;
+        renderTable('#prodsearch-table tbody', list, [
+            { key: 'id' },
+            { key: 'name' },
+            { key: 'category' },
+            { render: r => `<b>¥${fen2yuan(r.price)}</b>` },
+            { render: r => {
+                const s = r.stock || 0;
+                const cls = s === 0 ? 'color:#dc2626;font-weight:700' : (s < 10 ? 'color:#d97706;font-weight:700' : '');
+                return `<span style="${cls}">${s}</span>`;
+            }},
+            { key: 'sellerId' },
+            { render: r => `<span class="status-tag status-${r.status}">${r.status}</span>` }
+        ]);
+    } catch (e) {
+        showResult(document.getElementById('prodsearch-result'), { code: 400, message: e.message });
     }
 });
 
@@ -471,6 +603,7 @@ document.querySelectorAll('[data-orderaction]').forEach(btn => {
             let r;
             if (action === 'ship') r = BizStore.shipOrder(oid, opid);
             else if (action === 'complete') r = BizStore.completeOrder(oid, opid);
+            else if (action === 'refund') r = BizStore.refundOrder(oid, opid);
             else r = BizStore.cancelOrder(oid, opid);
             showResult(document.getElementById('bizorder-action-result'), { code: 200, data: r });
             loadOrderList(); loadUserList(); loadProductList();
