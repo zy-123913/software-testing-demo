@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>软件测试演示平台</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="header">
+    <div class="logo">🧪 软件测试演示平台</div>
+    <nav class="nav">
+        <button class="nav-btn active" data-tab="calc">计算器</button>
+        <button class="nav-btn" data-tab="str">字符串工具</button>
+        <button class="nav-btn" data-tab="user">用户校验</button>
+        <button class="nav-btn" data-tab="api">接口测试</button>
+        <button class="nav-btn" data-tab="test">运行测试</button>
+    </nav>
+</header>
+
+<main class="main">
+    <!-- 计算器 -->
+    <section class="panel active" id="panel-calc">
+        <h2>🔢 计算器工具</h2>
+        <div class="row">
+            <input type="number" id="calc-a" placeholder="数字 a" value="10">
+            <select id="calc-op">
+                <option value="add">+ 加法</option>
+                <option value="sub">− 减法</option>
+                <option value="mul">× 乘法</option>
+                <option value="div">÷ 除法</option>
+            </select>
+            <input type="number" id="calc-b" placeholder="数字 b" value="3">
+            <button class="btn-primary" id="calc-run">计算</button>
+        </div>
+        <div class="row">
+            <input type="number" id="calc-n" placeholder="判断/阶乘数字" value="17">
+            <button class="btn-secondary" data-single="isPrime">判断质数</button>
+            <button class="btn-secondary" data-single="factorial">计算阶乘</button>
+        </div>
+        <div class="result" id="calc-result"></div>
+    </section>
+
+    <!-- 字符串工具 -->
+    <section class="panel" id="panel-str">
+        <h2>📝 字符串处理</h2>
+        <div class="row">
+            <input type="text" id="str-s" placeholder="输入字符串" style="flex:2" value="hello_world">
+            <button class="btn-secondary" data-sop="isEmpty">是否空</button>
+            <button class="btn-secondary" data-sop="isBlank">是否空白</button>
+            <button class="btn-secondary" data-sop="reverse">反转</button>
+            <button class="btn-secondary" data-sop="toCamelCase">驼峰转换</button>
+            <button class="btn-secondary" data-sop="isPalindrome">回文判断</button>
+        </div>
+        <div class="row">
+            <input type="text" id="str-sub" placeholder="子串">
+            <button class="btn-secondary" data-sop="count">统计子串出现次数</button>
+        </div>
+        <div class="result" id="str-result"></div>
+    </section>
+
+    <!-- 用户校验 -->
+    <section class="panel" id="panel-user">
+        <h2>👤 用户信息校验</h2>
+        <div class="row two-col">
+            <div>
+                <label>用户名 (3-20位字母数字下划线)</label>
+                <input type="text" id="uv-username" placeholder="test_user_01">
+            </div>
+            <div>
+                <label>密码 (含大小写字母+数字，6-20位)</label>
+                <input type="text" id="uv-password" placeholder="Admin123">
+            </div>
+        </div>
+        <div class="row two-col">
+            <div>
+                <label>邮箱</label>
+                <input type="text" id="uv-email" placeholder="test@example.com">
+            </div>
+            <div>
+                <label>角色权限 (admin/editor/viewer/guest)</label>
+                <input type="text" id="uv-role" placeholder="admin">
+            </div>
+        </div>
+        <div class="row">
+            <button class="btn-primary" id="uv-validate">校验用户信息</button>
+            <button class="btn-secondary" id="uv-permission">查询角色权限</button>
+        </div>
+        <div class="result" id="user-result"></div>
+    </section>
+
+    <!-- 接口测试 -->
+    <section class="panel" id="panel-api">
+        <h2>🌐 HTTP 接口测试</h2>
+        <div class="sub-panel">
+            <h3>注册接口 POST /api/register</h3>
+            <div class="row">
+                <input type="text" id="reg-u" placeholder="用户名" value="newuser">
+                <input type="text" id="reg-p" placeholder="密码" value="Pass123">
+                <input type="text" id="reg-e" placeholder="邮箱" value="new@example.com">
+                <button class="btn-primary" id="reg-run">调用注册</button>
+            </div>
+            <div class="result small" id="reg-result"></div>
+        </div>
+        <div class="sub-panel">
+            <h3>登录接口 POST /api/login</h3>
+            <div class="row">
+                <input type="text" id="login-u" placeholder="用户名" value="admin">
+                <input type="text" id="login-p" placeholder="密码" value="Admin123">
+                <button class="btn-primary" id="login-run">调用登录</button>
+            </div>
+            <div class="result small" id="login-result"></div>
+        </div>
+        <div class="sub-panel">
+            <h3>权限接口 GET /api/permission</h3>
+            <div class="row">
+                <input type="text" id="perm-r" placeholder="角色" value="editor">
+                <button class="btn-primary" id="perm-run">查询权限</button>
+            </div>
+            <div class="result small" id="perm-result"></div>
+        </div>
+    </section>
+
+    <!-- 运行测试 -->
+    <section class="panel" id="panel-test">
+        <h2>🧪 运行测试套件</h2>
+        <div class="row">
+            <button class="btn-primary test-btn" data-target="all">▶ 运行全部测试</button>
+            <button class="btn-secondary test-btn" data-target="calculator">计算器单元测试</button>
+            <button class="btn-secondary test-btn" data-target="string">字符串单元测试</button>
+            <button class="btn-secondary test-btn" data-target="user">用户校验单元测试</button>
+            <button class="btn-secondary test-btn" data-target="api">HTTP 接口测试</button>
+            <button class="btn-secondary test-btn" data-target="suite">自动化测试套件</button>
+        </div>
+        <div id="test-summary" class="test-summary"></div>
+        <div id="test-failures" class="test-failures"></div>
+        <div id="test-log" class="log"></div>
+    </section>
+</main>
+
+<footer class="footer">
+    <span>JUnit 5 软件测试演示平台 · 前后端一体化</span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

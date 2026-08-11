@@ -1,0 +1,15 @@
+# Render 部署配置
+# 文档: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: software-testing-demo
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: JAVA_TOOL_OPTIONS
+        value: "-Dfile.encoding=UTF-8"
