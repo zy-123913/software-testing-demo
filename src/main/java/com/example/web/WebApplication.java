@@ -534,6 +534,8 @@ public class WebApplication {
                 doHandle(ex, p);
             } catch (com.example.common.BusinessException be) {
                 sendJson(ex, be.getCode() >= 400 ? be.getCode() : 400, error(be.getCode(), be.getMessage()));
+            } catch (NumberFormatException nfe) {
+                sendJson(ex, 400, error(400, "参数格式错误: " + nfe.getMessage()));
             } catch (Exception e) {
                 sendJson(ex, 500, error(500, "服务器错误: " + e.getMessage()));
             }
@@ -650,7 +652,7 @@ public class WebApplication {
         }
     }
 
-    // ====== 复用 UserApi 的 Handler（简化版，直接调用 validator） ======
+    // ====== 复用 UserApi 的 Handler（同时联动业务用户数据） ======
     class RegisterHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange ex) throws IOException {
@@ -660,11 +662,17 @@ public class WebApplication {
                     return;
                 }
                 Map<String, String> p = parseQuery(ex.getRequestURI().getQuery());
-                if (userValidator.validateUser(p.get("username"), p.get("password"), p.get("email"))) {
-                    sendJson(ex, 200, success("注册成功"));
-                } else {
+                if (!userValidator.validateUser(p.get("username"), p.get("password"), p.get("email"))) {
                     sendJson(ex, 400, error(400, "注册信息不合法"));
+                    return;
                 }
+                // 真正写入业务用户，使接口测试的注册也能出现在用户列表中
+                Object user = userService.register(p.get("username"), p.get("password"), p.get("email"), "BUYER");
+                Map<String, Object> r = success("注册成功");
+                r.put("data", user);
+                sendJson(ex, 200, r);
+            } catch (com.example.common.BusinessException be) {
+                sendJson(ex, be.getCode() >= 400 ? be.getCode() : 400, error(be.getCode(), be.getMessage()));
             } catch (Exception e) {
                 sendJson(ex, 500, error(500, e.getMessage()));
             }
@@ -680,13 +688,14 @@ public class WebApplication {
                     return;
                 }
                 Map<String, String> p = parseQuery(ex.getRequestURI().getQuery());
-                if ("admin".equals(p.get("username")) && "Admin123".equals(p.get("password"))) {
-                    Map<String, Object> r = success("登录成功");
-                    r.put("token", "mock-token-" + System.currentTimeMillis());
-                    sendJson(ex, 200, r);
-                } else {
-                    sendJson(ex, 401, error(401, "用户名或密码错误"));
-                }
+                // 使用业务用户登录验证，注册的用户也能登录
+                Object loginResult = userService.login(p.get("username"), p.get("password"));
+                Map<String, Object> r = success("登录成功");
+                r.put("data", loginResult);
+                r.put("token", "mock-token-" + System.currentTimeMillis());
+                sendJson(ex, 200, r);
+            } catch (com.example.common.BusinessException be) {
+                sendJson(ex, 401, error(401, be.getMessage()));
             } catch (Exception e) {
                 sendJson(ex, 500, error(500, e.getMessage()));
             }

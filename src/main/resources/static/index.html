@@ -135,6 +135,21 @@
             </div>
             <div class="result small" id="bizuser-recharge-result"></div>
         </div>
+        <div class="sub-panel">
+            <h3>💸 账户交易流水</h3>
+            <div class="row">
+                <input type="number" id="txlog-userid" placeholder="输入用户ID查询流水">
+                <button class="btn-primary" id="txlog-query">查询流水</button>
+                <span class="badge" id="txlog-count">共 0 条</span>
+            </div>
+            <div class="result small" id="txlog-result"></div>
+            <div class="table-wrap" style="margin-top:12px;">
+                <table class="data-table" id="txlog-table">
+                    <thead><tr><th>流水ID</th><th>类型</th><th>变动金额(元)</th><th>变动后余额(元)</th><th>关联单号</th><th>备注</th><th>时间</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
         <h3 style="margin:16px 0 12px;color:#1e3c72;">📋 用户列表</h3>
         <div class="table-wrap">
             <table class="data-table" id="bizuser-table">

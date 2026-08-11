@@ -8,6 +8,17 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
+// ====== 安全工具：元素不存在时不报错，避免单个缺失元素导致全局脚本中断 ======
+function $(id) { return document.getElementById(id); }
+function bindClick(id, handler) {
+    const el = typeof id === 'string' ? $(id) : id;
+    if (!el) return;
+    el.addEventListener('click', handler);
+}
+function bindAll(selector, handler) {
+    document.querySelectorAll(selector).forEach(el => el && el.addEventListener('click', handler));
+}
+
 // ====== 通用请求方法 ======
 async function api(url, opts = {}) {
     try {
@@ -43,12 +54,10 @@ document.getElementById('calc-run').addEventListener('click', async () => {
     showResult($calcRes, data);
 });
 
-document.querySelectorAll('[data-single]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const op = btn.dataset.single;
-        const data = await api(`/api/calc?a=${$calcN.value}&op=${op}`);
-        showResult($calcRes, data);
-    });
+bindAll('[data-single]', async (e) => {
+    const op = e.currentTarget.dataset.single;
+    const data = await api(`/api/calc?a=${$calcN.value}&op=${op}`);
+    showResult($calcRes, data);
 });
 
 // ====== 字符串工具 ======
@@ -56,84 +65,108 @@ const $strS = document.getElementById('str-s');
 const $strSub = document.getElementById('str-sub');
 const $strRes = document.getElementById('str-result');
 
-document.querySelectorAll('[data-sop]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const op = btn.dataset.sop;
-        let url = `/api/string?s=${encodeURIComponent($strS.value)}&op=${op}`;
-        if (op === 'count') url += `&sub=${encodeURIComponent($strSub.value)}`;
-        const data = await api(url);
-        showResult($strRes, data);
-    });
+bindAll('[data-sop]', async (e) => {
+    const btn = e.currentTarget;
+    const op = btn.dataset.sop;
+    let url = `/api/string?s=${encodeURIComponent($strS.value)}&op=${op}`;
+    if (op === 'count') url += `&sub=${encodeURIComponent($strSub.value)}`;
+    const data = await api(url);
+    showResult($strRes, data);
 });
 
 // ====== 用户校验 ======
-const $uvUser = document.getElementById('uv-username');
-const $uvPwd = document.getElementById('uv-password');
-const $uvEmail = document.getElementById('uv-email');
-const $uvRole = document.getElementById('uv-role');
-const $uvRes = document.getElementById('user-result');
+const $uvUser = $('uv-username');
+const $uvPwd = $('uv-password');
+const $uvEmail = $('uv-email');
+const $uvRole = $('uv-role');
+const $uvRes = $('user-result');
 
-document.getElementById('uv-validate').addEventListener('click', async () => {
+bindClick('uv-validate', async () => {
+    if (!$uvUser || !$uvPwd || !$uvEmail || !$uvRes) return;
     const url = `/api/user?op=validate&u=${encodeURIComponent($uvUser.value)}`
         + `&p=${encodeURIComponent($uvPwd.value)}&e=${encodeURIComponent($uvEmail.value)}`;
     const data = await api(url);
     showResult($uvRes, data);
 });
 
-document.getElementById('uv-permission').addEventListener('click', async () => {
+bindClick('uv-permission', async () => {
+    if (!$uvRole || !$uvRes) return;
     const data = await api(`/api/user?op=permission&role=${encodeURIComponent($uvRole.value)}`);
     showResult($uvRes, data);
 });
 
 // ====== 接口测试 ======
-document.getElementById('reg-run').addEventListener('click', async () => {
-    const q = `username=${encodeURIComponent(document.getElementById('reg-u').value)}`
-        + `&password=${encodeURIComponent(document.getElementById('reg-p').value)}`
-        + `&email=${encodeURIComponent(document.getElementById('reg-e').value)}`;
+bindClick('reg-run', async () => {
+    const regU = $('reg-u'), regP = $('reg-p'), regE = $('reg-e');
+    const regResult = $('reg-result');
+    if (!regU || !regP || !regE || !regResult) return;
+    const q = `username=${encodeURIComponent(regU.value)}`
+        + `&password=${encodeURIComponent(regP.value)}`
+        + `&email=${encodeURIComponent(regE.value)}`;
     const data = await api(`/api/register?${q}`, { method: 'POST' });
-    showResult(document.getElementById('reg-result'), data);
+    showResult(regResult, data);
+    // 注册成功后同步刷新电商用户列表，使用户在两个tab中注册都能看到结果
+    if (data && data.code === 200) {
+        try { await loadUserList(); } catch (e) { /* ignore */ }
+    }
 });
 
-document.getElementById('login-run').addEventListener('click', async () => {
-    const q = `username=${encodeURIComponent(document.getElementById('login-u').value)}`
-        + `&password=${encodeURIComponent(document.getElementById('login-p').value)}`;
+bindClick('login-run', async () => {
+    const loginU = $('login-u'), loginP = $('login-p'), loginResult = $('login-result');
+    if (!loginU || !loginP || !loginResult) return;
+    const q = `username=${encodeURIComponent(loginU.value)}`
+        + `&password=${encodeURIComponent(loginP.value)}`;
     const data = await api(`/api/login?${q}`, { method: 'POST' });
-    showResult(document.getElementById('login-result'), data);
+    showResult(loginResult, data);
 });
 
-document.getElementById('perm-run').addEventListener('click', async () => {
-    const data = await api(`/api/permission?role=${encodeURIComponent(document.getElementById('perm-r').value)}`);
-    showResult(document.getElementById('perm-result'), data);
+bindClick('perm-run', async () => {
+    const permR = $('perm-r'), permResult = $('perm-result');
+    if (!permR || !permResult) return;
+    const data = await api(`/api/permission?role=${encodeURIComponent(permR.value)}`);
+    showResult(permResult, data);
 });
 
 // ============================================================
 // ====== 电商业务：用户管理 / 商品管理 / 订单交易 ============
 // ============================================================
 
-// 通用：表格渲染
+// 通用：表格渲染（带防御性空值检查）
 function renderTable(tbodySelector, rows, columns) {
-    const tbody = document.querySelector(tbodySelector);
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${columns.length}" style="text-align:center;color:#999;padding:24px;">暂无数据，点击「初始化演示数据」或添加记录</td></tr>`;
-        return;
-    }
-    rows.forEach(row => {
-        const tr = document.createElement('tr');
-        columns.forEach(col => {
-            const td = document.createElement('td');
-            td.innerHTML = typeof col.render === 'function' ? col.render(row) : (row[col.key] ?? '-');
-            tr.appendChild(td);
+    try {
+        const tbody = document.querySelector(tbodySelector);
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        const safeCols = Array.isArray(columns) ? columns : [];
+        const safeRows = Array.isArray(rows) ? rows : [];
+        if (safeRows.length === 0) {
+            const colCount = Math.max(1, safeCols.length);
+            tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align:center;color:#999;padding:24px;">暂无数据，点击「初始化演示数据」或添加记录</td></tr>`;
+            return;
+        }
+        safeRows.forEach(row => {
+            const tr = document.createElement('tr');
+            safeCols.forEach(col => {
+                const td = document.createElement('td');
+                try {
+                    td.innerHTML = typeof col.render === 'function' ? col.render(row) : ((row && row[col.key] != null) ? row[col.key] : '-');
+                } catch (e) {
+                    td.textContent = '-';
+                }
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
         });
-        tbody.appendChild(tr);
-    });
+    } catch (e) {
+        console.error('[renderTable] error:', e);
+    }
 }
 
 // ---- 初始化演示数据 ----
-document.getElementById('biz-init').addEventListener('click', async () => {
+bindClick('biz-init', async () => {
+    const resultEl = $('bizuser-register-result');
     const data = await api('/biz/init');
-    showResult(document.getElementById('bizuser-register-result'), data);
+    if (resultEl) showResult(resultEl, data);
     if (data.code === 200) {
         await Promise.all([loadUserList(), loadProductList(), loadOrderList()]);
     }
@@ -141,80 +174,107 @@ document.getElementById('biz-init').addEventListener('click', async () => {
 
 // ---- 用户管理 ----
 async function loadUserList() {
-    const data = await api('/biz/user/list');
-    const list = (data && data.code === 200 && data.data) ? data.data : [];
-    document.getElementById('bizuser-count').textContent = `用户数: ${list.length}`;
-    // 把第一个卖家ID填入商品上架表单
-    const seller = list.find(u => u.role === 'SELLER');
-    if (seller && !document.getElementById('bizprod-seller').value) {
-        document.getElementById('bizprod-seller').value = seller.id;
+    try {
+        const data = await api('/biz/user/list');
+        const list = (data && data.code === 200 && data.data) ? data.data : [];
+        const countEl = $('bizuser-count');
+        if (countEl) countEl.textContent = `用户数: ${list.length}`;
+        // 把第一个卖家ID填入商品上架表单
+        const seller = list.find(u => u && u.role === 'SELLER');
+        const sellerInput = $('bizprod-seller');
+        if (seller && sellerInput && !sellerInput.value) {
+            sellerInput.value = seller.id;
+        }
+        // 把第一个买家ID填入订单表单
+        const buyer = list.find(u => u && u.role === 'BUYER');
+        const buyerInput = $('bizorder-buyer');
+        if (buyer && buyerInput && !buyerInput.value) {
+            buyerInput.value = buyer.id;
+        }
+        const rechargeInput = $('bizuser-recharge-id');
+        if (rechargeInput && !rechargeInput.value && buyer) {
+            rechargeInput.value = buyer.id;
+        }
+        const txlogInput = $('txlog-userid');
+        if (txlogInput && !txlogInput.value && buyer) {
+            txlogInput.value = buyer.id;
+        }
+        renderTable('#bizuser-table tbody', list, [
+            { key: 'id' },
+            { key: 'username' },
+            { key: 'email' },
+            { render: r => `<span class="status-tag role-${r.role}">${r.role}</span>` },
+            { render: r => `<b>¥${fen2yuan(r.balance)}</b>` },
+            { key: 'createdAt' }
+        ]);
+        return list;
+    } catch (e) {
+        console.error('[loadUserList] error:', e);
+        return [];
     }
-    // 把第一个买家ID填入订单表单
-    const buyer = list.find(u => u.role === 'BUYER');
-    if (buyer && !document.getElementById('bizorder-buyer').value) {
-        document.getElementById('bizorder-buyer').value = buyer.id;
-    }
-    if (!document.getElementById('bizuser-recharge-id').value && buyer) {
-        document.getElementById('bizuser-recharge-id').value = buyer.id;
-    }
-    if (!document.getElementById('txlog-userid').value && buyer) {
-        document.getElementById('txlog-userid').value = buyer.id;
-    }
-    renderTable('#bizuser-table tbody', list, [
-        { key: 'id' },
-        { key: 'username' },
-        { key: 'email' },
-        { render: r => `<span class="status-tag role-${r.role}">${r.role}</span>` },
-        { render: r => `<b>¥${fen2yuan(r.balance)}</b>` },
-        { key: 'createdAt' }
-    ]);
-    return list;
 }
-document.getElementById('bizuser-refresh').addEventListener('click', loadUserList);
+bindClick('bizuser-refresh', loadUserList);
 
-document.getElementById('bizuser-register').addEventListener('click', async () => {
+bindClick('bizuser-register', async () => {
+    const uEl = $('bizuser-username'), pEl = $('bizuser-password');
+    const eEl = $('bizuser-email'), rEl = $('bizuser-role');
+    const resultEl = $('bizuser-register-result');
+    if (!uEl || !pEl || !eEl || !rEl) return;
     const qs = new URLSearchParams({
-        username: document.getElementById('bizuser-username').value,
-        password: document.getElementById('bizuser-password').value,
-        email: document.getElementById('bizuser-email').value,
-        role: document.getElementById('bizuser-role').value
+        username: uEl.value,
+        password: pEl.value,
+        email: eEl.value,
+        role: rEl.value
     }).toString();
     const data = await api(`/biz/user/register?${qs}`, { method: 'POST' });
-    showResult(document.getElementById('bizuser-register-result'), data);
+    if (resultEl) showResult(resultEl, data);
     if (data.code === 200) await loadUserList();
 });
 
-document.getElementById('bizuser-login').addEventListener('click', async () => {
+bindClick('bizuser-login', async () => {
+    const uEl = $('bizuser-login-u'), pEl = $('bizuser-login-p');
+    const resultEl = $('bizuser-login-result');
+    if (!uEl || !pEl) return;
     const qs = new URLSearchParams({
-        username: document.getElementById('bizuser-login-u').value,
-        password: document.getElementById('bizuser-login-p').value
+        username: uEl.value,
+        password: pEl.value
     }).toString();
     const data = await api(`/biz/user/login?${qs}`, { method: 'POST' });
-    showResult(document.getElementById('bizuser-login-result'), data);
+    if (resultEl) showResult(resultEl, data);
 });
 
-document.getElementById('bizuser-recharge').addEventListener('click', async () => {
-    const id = document.getElementById('bizuser-recharge-id').value;
-    const amount = parseInt(document.getElementById('bizuser-recharge-amount').value || '0', 10);
+bindClick('bizuser-recharge', async () => {
+    const idEl = $('bizuser-recharge-id');
+    const amountEl = $('bizuser-recharge-amount');
+    const resultEl = $('bizuser-recharge-result');
+    if (!idEl || !amountEl) return;
+    const id = idEl.value;
+    const amount = parseInt(amountEl.value || '0', 10);
     const qs = `userId=${id}&amount=${amount * 100}`; // 元转分
     const data = await api(`/biz/user/recharge?${qs}`, { method: 'POST' });
-    showResult(document.getElementById('bizuser-recharge-result'), data);
+    if (resultEl) showResult(resultEl, data);
     if (data.code === 200) await loadUserList();
 });
 
 // ---- 账户交易流水 ----
-document.getElementById('txlog-query').addEventListener('click', async () => {
-    const uid = document.getElementById('txlog-userid').value;
+bindClick('txlog-query', async () => {
+    const uidEl = $('txlog-userid');
+    const resultEl = $('txlog-result');
+    const countEl = $('txlog-count');
+    if (!uidEl) return;
+    const uid = uidEl.value;
     if (!uid) {
-        const el = document.getElementById('txlog-result');
-        el.classList.remove('ok'); el.classList.add('err');
-        el.textContent = '请先输入用户ID';
+        const el = resultEl;
+        if (el) {
+            el.classList.remove('ok'); el.classList.add('err');
+            el.textContent = '请先输入用户ID';
+        }
         return;
     }
     const data = await api(`/biz/user/transactions?userId=${uid}`);
-    showResult(document.getElementById('txlog-result'), data);
+    if (resultEl) showResult(resultEl, data);
     const list = (data && data.code === 200 && data.data) ? data.data : [];
-    document.getElementById('txlog-count').textContent = `共 ${list.length} 条`;
+    if (countEl) countEl.textContent = `共 ${list.length} 条`;
     renderTable('#txlog-table tbody', list, [
         { key: 'id' },
         { render: r => `<span class="status-tag tx-${r.type}">${r.type || '-'}</span>` },
@@ -256,39 +316,54 @@ async function loadProductList(category) {
     ]);
     return list;
 }
-document.getElementById('bizprod-refresh').addEventListener('click', () => loadProductList());
-document.getElementById('bizprod-filter-btn').addEventListener('click', () => {
-    loadProductList(document.getElementById('bizprod-category-filter').value);
+bindClick('bizprod-refresh', () => loadProductList());
+bindClick('bizprod-filter-btn', () => {
+    const filterEl = $('bizprod-category-filter');
+    loadProductList(filterEl ? filterEl.value : undefined);
 });
 
-document.getElementById('bizprod-create').addEventListener('click', async () => {
-    const name = document.getElementById('bizprod-name').value;
-    const price = parseInt(document.getElementById('bizprod-price').value || '0', 10) * 100;
-    const stock = parseInt(document.getElementById('bizprod-stock').value || '0', 10);
-    const category = document.getElementById('bizprod-category').value;
-    const sellerId = document.getElementById('bizprod-seller').value;
+bindClick('bizprod-create', async () => {
+    const nameEl = $('bizprod-name');
+    const priceEl = $('bizprod-price');
+    const stockEl = $('bizprod-stock');
+    const catEl = $('bizprod-category');
+    const sellerEl = $('bizprod-seller');
+    const resultEl = $('bizprod-create-result');
+    if (!nameEl || !priceEl || !stockEl || !catEl || !sellerEl) return;
+    const name = nameEl.value;
+    const price = parseInt(priceEl.value || '0', 10) * 100;
+    const stock = parseInt(stockEl.value || '0', 10);
+    const category = catEl.value;
+    const sellerId = sellerEl.value;
     const qs = new URLSearchParams({ name, price, stock, category, sellerId }).toString();
     const data = await api(`/biz/product/create?${qs}`, { method: 'POST' });
-    showResult(document.getElementById('bizprod-create-result'), data);
+    if (resultEl) showResult(resultEl, data);
     if (data.code === 200) await loadProductList();
 });
 
 // ---- 商品搜索分页 ----
-document.getElementById('prodsearch-btn').addEventListener('click', async () => {
+bindClick('prodsearch-btn', async () => {
+    const kwEl = $('prodsearch-kw');
+    const catEl = $('prodsearch-cat');
+    const pageEl = $('prodsearch-page');
+    const sizeEl = $('prodsearch-size');
+    const resultEl = $('prodsearch-result');
+    const infoEl = $('prodsearch-info');
+    if (!kwEl || !catEl || !pageEl || !sizeEl) return;
     const qs = new URLSearchParams({
-        keyword: document.getElementById('prodsearch-kw').value || '',
-        category: document.getElementById('prodsearch-cat').value || '',
-        page: document.getElementById('prodsearch-page').value || '1',
-        size: document.getElementById('prodsearch-size').value || '10'
+        keyword: kwEl.value || '',
+        category: catEl.value || '',
+        page: pageEl.value || '1',
+        size: sizeEl.value || '10'
     }).toString();
     const data = await api(`/biz/product/search?${qs}`);
-    showResult(document.getElementById('prodsearch-result'), data);
+    if (resultEl) showResult(resultEl, data);
     const ok = data && data.code === 200 && data.data;
     const list = ok ? data.data.list || [] : [];
     const total = ok ? (data.data.total || 0) : 0;
     const page = ok ? (data.data.page || 1) : 1;
     const tp = ok ? (data.data.totalPages || 0) : 0;
-    document.getElementById('prodsearch-info').textContent = `共 ${total} 条 / 第 ${page} 页 / 共 ${tp} 页`;
+    if (infoEl) infoEl.textContent = `共 ${total} 条 / 第 ${page} 页 / 共 ${tp} 页`;
     renderTable('#prodsearch-table tbody', list, [
         { key: 'id' },
         { key: 'name' },
@@ -311,9 +386,12 @@ async function loadOrderList(status) {
         : `/biz/order/list`;
     const data = await api(url);
     const list = (data && data.code === 200 && data.data) ? data.data : [];
-    const totalAmount = list.reduce((s, o) => s + (o.status === 'COMPLETED' ? (o.totalAmount || 0) : 0), 0);
-    document.getElementById('bizorder-count').textContent = `订单数: ${list.length}`;
-    document.getElementById('bizorder-amount').textContent = `总成交额: ¥${fen2yuan(totalAmount)}`;
+    const PAID_STATUSES = new Set(['PAID', 'SHIPPED', 'COMPLETED']);
+    const totalAmount = list.reduce((s, o) => s + (PAID_STATUSES.has(o.status) ? (o.totalAmount || 0) : 0), 0);
+    const countEl = $('bizorder-count');
+    const amountEl = $('bizorder-amount');
+    if (countEl) countEl.textContent = `订单数: ${list.length}`;
+    if (amountEl) amountEl.textContent = `总成交额: ¥${fen2yuan(totalAmount)}`;
     renderTable('#bizorder-table tbody', list, [
         { key: 'id' },
         { key: 'buyerId' },
@@ -327,38 +405,48 @@ async function loadOrderList(status) {
     ]);
     return list;
 }
-document.getElementById('bizorder-refresh').addEventListener('click', () => loadOrderList());
-document.getElementById('bizorder-filter-btn').addEventListener('click', () => {
-    loadOrderList(document.getElementById('bizorder-status-filter').value);
+bindClick('bizorder-refresh', () => loadOrderList());
+bindClick('bizorder-filter-btn', () => {
+    const filterEl = $('bizorder-status-filter');
+    loadOrderList(filterEl ? filterEl.value : undefined);
 });
 
-document.getElementById('bizorder-create').addEventListener('click', async () => {
+bindClick('bizorder-create', async () => {
+    const buyerEl = $('bizorder-buyer');
+    const prodEl = $('bizorder-product');
+    const qtyEl = $('bizorder-quantity');
+    const addrEl = $('bizorder-address');
+    const resultEl = $('bizorder-create-result');
+    if (!buyerEl || !prodEl || !qtyEl) return;
     const qs = new URLSearchParams({
-        buyerId: document.getElementById('bizorder-buyer').value,
-        productId: document.getElementById('bizorder-product').value,
-        quantity: document.getElementById('bizorder-quantity').value,
-        address: document.getElementById('bizorder-address').value
+        buyerId: buyerEl.value,
+        productId: prodEl.value,
+        quantity: qtyEl.value,
+        address: addrEl ? addrEl.value : ''
     }).toString();
     const data = await api(`/biz/order/create?${qs}`, { method: 'POST' });
-    showResult(document.getElementById('bizorder-create-result'), data);
+    if (resultEl) showResult(resultEl, data);
     if (data.code === 200) {
         await Promise.all([loadOrderList(), loadUserList(), loadProductList()]);
     }
 });
 
-document.querySelectorAll('[data-orderaction]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const action = btn.dataset.orderaction;
-        const orderId = document.getElementById('bizorder-action-id').value;
-        const opId = document.getElementById('bizorder-action-opid').value;
-        let qs;
-        if (action === 'ship') qs = `orderId=${orderId}&sellerId=${opId}`;
-        else if (action === 'complete') qs = `orderId=${orderId}&buyerId=${opId}`;
-        else qs = `orderId=${orderId}&operatorId=${opId}`;
-        const data = await api(`/biz/order/${action}?${qs}`, { method: 'POST' });
-        showResult(document.getElementById('bizorder-action-result'), data);
-        if (data.code === 200) await loadOrderList();
-    });
+bindAll('[data-orderaction]', async (e) => {
+    const btn = e.currentTarget;
+    const action = btn.dataset.orderaction;
+    const orderIdEl = $('bizorder-action-id');
+    const opIdEl = $('bizorder-action-opid');
+    const resultEl = $('bizorder-action-result');
+    if (!orderIdEl || !opIdEl) return;
+    const orderId = orderIdEl.value;
+    const opId = opIdEl.value;
+    let qs;
+    if (action === 'ship') qs = `orderId=${orderId}&sellerId=${opId}`;
+    else if (action === 'complete') qs = `orderId=${orderId}&buyerId=${opId}`;
+    else qs = `orderId=${orderId}&operatorId=${opId}`;
+    const data = await api(`/biz/order/${action}?${qs}`, { method: 'POST' });
+    if (resultEl) showResult(resultEl, data);
+    if (data.code === 200) await loadOrderList();
 });
 
 // 页面加载时自动尝试初始化并加载列表（不阻塞）
@@ -383,10 +471,10 @@ function logLine(text, cls) {
     $log.scrollTop = $log.scrollHeight;
 }
 
-document.querySelectorAll('.test-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const target = btn.dataset.target;
-        document.querySelectorAll('.test-btn').forEach(b => b.disabled = true);
+bindAll('.test-btn', async (e) => {
+    const btn = e.currentTarget;
+    const target = btn.dataset.target;
+    document.querySelectorAll('.test-btn').forEach(b => b.disabled = true);
         $log.classList.add('show');
         $log.innerHTML = '';
         $summary.classList.remove('show', 'ok', 'fail');
@@ -447,18 +535,21 @@ document.querySelectorAll('.test-btn').forEach(btn => {
         }
 
         document.querySelectorAll('.test-btn').forEach(b => b.disabled = false);
-    });
 });
 
 // ====== 性能测试 ======
-const $perfSummary = document.getElementById('perf-summary');
-const $perfDetail = document.getElementById('perf-detail');
-const $perfRun = document.getElementById('perf-run');
+const $perfSummary = $('perf-summary');
+const $perfDetail = $('perf-detail');
 
-$perfRun.addEventListener('click', async () => {
-    const apiName = document.getElementById('perf-api').value;
-    const threads = document.getElementById('perf-threads').value;
-    const loops = document.getElementById('perf-loops').value;
+bindClick('perf-run', async () => {
+    const apiEl = $('perf-api');
+    const threadsEl = $('perf-threads');
+    const loopsEl = $('perf-loops');
+    const $perfRun = $('perf-run');
+    if (!$perfRun || !apiEl || !threadsEl || !loopsEl || !$perfSummary || !$perfDetail) return;
+    const apiName = apiEl.value;
+    const threads = threadsEl.value;
+    const loops = loopsEl.value;
 
     $perfRun.disabled = true;
     $perfRun.textContent = '⏳ 压测进行中...';

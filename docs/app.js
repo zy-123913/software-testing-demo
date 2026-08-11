@@ -1,4 +1,4 @@
-// ====== Tab 切换 ======
+﻿// ====== Tab 切换 ======
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -7,6 +7,17 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     });
 });
+
+// ====== 安全工具：避免缺失元素导致全局脚本中断 ======
+function $(id) { return document.getElementById(id); }
+function bindClick(id, handler) {
+    const el = typeof id === 'string' ? $(id) : id;
+    if (!el) return;
+    el.addEventListener('click', handler);
+}
+function bindAll(selector, handler) {
+    document.querySelectorAll(selector).forEach(el => el && el.addEventListener('click', handler));
+}
 
 // ====== 工具类前端实现（与后端 Java 逻辑一致） ======
 const Calculator = {
@@ -275,22 +286,33 @@ function showResult(el, data, okFn) {
 }
 function fen2yuan(fen) { return fen == null ? '-' : (fen / 100).toFixed(2); }
 function renderTable(tbodySelector, rows, columns) {
-    const tbody = document.querySelector(tbodySelector);
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${columns.length}" style="text-align:center;color:#999;padding:24px;">暂无数据，点击「初始化演示数据」或添加记录</td></tr>`;
-        return;
-    }
-    rows.forEach(row => {
-        const tr = document.createElement('tr');
-        columns.forEach(col => {
-            const td = document.createElement('td');
-            td.innerHTML = typeof col.render === 'function' ? col.render(row) : (row[col.key] ?? '-');
-            tr.appendChild(td);
+    try {
+        const tbody = document.querySelector(tbodySelector);
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        const safeCols = Array.isArray(columns) ? columns : [];
+        const safeRows = Array.isArray(rows) ? rows : [];
+        if (safeRows.length === 0) {
+            const colCount = Math.max(1, safeCols.length);
+            tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align:center;color:#999;padding:24px;">暂无数据，点击「初始化演示数据」或添加记录</td></tr>`;
+            return;
+        }
+        safeRows.forEach(row => {
+            const tr = document.createElement('tr');
+            safeCols.forEach(col => {
+                const td = document.createElement('td');
+                try {
+                    td.innerHTML = typeof col.render === 'function' ? col.render(row) : ((row && row[col.key] != null) ? row[col.key] : '-');
+                } catch (e) {
+                    td.textContent = '-';
+                }
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
         });
-        tbody.appendChild(tr);
-    });
+    } catch (e) {
+        console.error('[renderTable] error:', e);
+    }
 }
 
 // ====== 计算器 ======
@@ -300,7 +322,7 @@ const $calcOp = document.getElementById('calc-op');
 const $calcN = document.getElementById('calc-n');
 const $calcRes = document.getElementById('calc-result');
 
-document.getElementById('calc-run').addEventListener('click', () => {
+bindClick('calc-run', () => {
     const a = parseInt($calcA.value) || 0;
     const b = parseInt($calcB.value) || 0;
     const op = $calcOp.value;
@@ -316,16 +338,15 @@ document.getElementById('calc-run').addEventListener('click', () => {
     showResult($calcRes, result);
 });
 
-document.querySelectorAll('[data-single]').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const n = parseInt($calcN.value) || 0;
-        const op = btn.dataset.single;
-        const result = { code: 200, op };
-        try {
-            result.result = op === 'isPrime' ? Calculator.isPrime(n) : Calculator.factorial(n);
-        } catch (e) { result.code = 400; result.message = e.message; }
-        showResult($calcRes, result);
-    });
+bindAll('[data-single]', (e) => {
+    const btn = e.currentTarget;
+    const n = parseInt($calcN.value) || 0;
+    const op = btn.dataset.single;
+    const result = { code: 200, op };
+    try {
+        result.result = op === 'isPrime' ? Calculator.isPrime(n) : Calculator.factorial(n);
+    } catch (e) { result.code = 400; result.message = e.message; }
+    showResult($calcRes, result);
 });
 
 // ====== 字符串 ======
@@ -333,44 +354,43 @@ const $strS = document.getElementById('str-s');
 const $strSub = document.getElementById('str-sub');
 const $strRes = document.getElementById('str-result');
 
-document.querySelectorAll('[data-sop]').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const op = btn.dataset.sop;
-        const s = $strS.value;
-        const result = { code: 200, op, input: s };
-        try {
-            switch (op) {
-                case 'isEmpty': result.result = StringUtils.isEmpty(s); break;
-                case 'isBlank': result.result = StringUtils.isBlank(s); break;
-                case 'reverse': result.result = StringUtils.reverse(s); break;
-                case 'toCamelCase': result.result = StringUtils.toCamelCase(s); break;
-                case 'isPalindrome': result.result = StringUtils.isPalindrome(s); break;
-                case 'count': result.sub = $strSub.value; result.result = StringUtils.countOccurrences(s, $strSub.value); break;
-            }
-        } catch (e) { result.code = 400; result.message = e.message; }
-        showResult($strRes, result);
-    });
+bindAll('[data-sop]', (e) => {
+    const btn = e.currentTarget;
+    const op = btn.dataset.sop;
+    const s = $strS.value;
+    const result = { code: 200, op, input: s };
+    try {
+        switch (op) {
+            case 'isEmpty': result.result = StringUtils.isEmpty(s); break;
+            case 'isBlank': result.result = StringUtils.isBlank(s); break;
+            case 'reverse': result.result = StringUtils.reverse(s); break;
+            case 'toCamelCase': result.result = StringUtils.toCamelCase(s); break;
+            case 'isPalindrome': result.result = StringUtils.isPalindrome(s); break;
+            case 'count': result.sub = $strSub.value; result.result = StringUtils.countOccurrences(s, $strSub.value); break;
+        }
+    } catch (e) { result.code = 400; result.message = e.message; }
+    showResult($strRes, result);
 });
 
 // ====== 用户校验 ======
-document.getElementById('uv-validate').addEventListener('click', () => {
+bindClick('uv-validate', () => {
     const result = {
         code: 200, op: 'validate',
         result: UserValidator.validateUser(
-            document.getElementById('uv-username').value,
-            document.getElementById('uv-password').value,
-            document.getElementById('uv-email').value
+            $('uv-username') ? $('uv-username').value : '',
+            $('uv-password') ? $('uv-password').value : '',
+            $('uv-email') ? $('uv-email').value : ''
         )
     };
-    showResult(document.getElementById('user-result'), result);
+    if ($('user-result')) showResult($('user-result'), result);
 });
 
-document.getElementById('uv-permission').addEventListener('click', () => {
+bindClick('uv-permission', () => {
     const result = { code: 200, op: 'permission' };
     try {
-        result.result = UserValidator.checkPermission(document.getElementById('uv-role').value);
+        result.result = UserValidator.checkPermission($('uv-role') ? $('uv-role').value : '');
     } catch (e) { result.code = 400; result.message = e.message; }
-    showResult(document.getElementById('user-result'), result);
+    if ($('user-result')) showResult($('user-result'), result);
 });
 
 // ============================================================
@@ -378,31 +398,41 @@ document.getElementById('uv-permission').addEventListener('click', () => {
 // ============================================================
 
 async function loadUserList() {
-    const list = BizStore.listUsers();
-    document.getElementById('bizuser-count').textContent = `用户数: ${list.length}`;
-    const seller = list.find(u => u.role === 'SELLER');
-    if (seller && !document.getElementById('bizprod-seller').value) {
-        document.getElementById('bizprod-seller').value = seller.id;
+    try {
+        const list = BizStore.listUsers();
+        const countEl = document.getElementById('bizuser-count');
+        if (countEl) countEl.textContent = `用户数: ${list.length}`;
+        const seller = list.find(u => u && u.role === 'SELLER');
+        const sellerInput = document.getElementById('bizprod-seller');
+        if (seller && sellerInput && !sellerInput.value) {
+            sellerInput.value = seller.id;
+        }
+        const buyer = list.find(u => u && u.role === 'BUYER');
+        const buyerInput = document.getElementById('bizorder-buyer');
+        if (buyer && buyerInput && !buyerInput.value) {
+            buyerInput.value = buyer.id;
+        }
+        const rechargeInput = document.getElementById('bizuser-recharge-id');
+        if (rechargeInput && !rechargeInput.value && buyer) {
+            rechargeInput.value = buyer.id;
+        }
+        const txlogInput = document.getElementById('txlog-userid');
+        if (txlogInput && !txlogInput.value && buyer) {
+            txlogInput.value = buyer.id;
+        }
+        renderTable('#bizuser-table tbody', list, [
+            { key: 'id' },
+            { key: 'username' },
+            { key: 'email' },
+            { render: r => `<span class="status-tag role-${r.role}">${r.role}</span>` },
+            { render: r => `<b>¥${fen2yuan(r.balance)}</b>` },
+            { key: 'createdAt' }
+        ]);
+        return list;
+    } catch (e) {
+        console.error('[loadUserList] error:', e);
+        return [];
     }
-    const buyer = list.find(u => u.role === 'BUYER');
-    if (buyer && !document.getElementById('bizorder-buyer').value) {
-        document.getElementById('bizorder-buyer').value = buyer.id;
-    }
-    if (!document.getElementById('bizuser-recharge-id').value && buyer) {
-        document.getElementById('bizuser-recharge-id').value = buyer.id;
-    }
-    if (!document.getElementById('txlog-userid').value && buyer) {
-        document.getElementById('txlog-userid').value = buyer.id;
-    }
-    renderTable('#bizuser-table tbody', list, [
-        { key: 'id' },
-        { key: 'username' },
-        { key: 'email' },
-        { render: r => `<span class="status-tag role-${r.role}">${r.role}</span>` },
-        { render: r => `<b>¥${fen2yuan(r.balance)}</b>` },
-        { key: 'createdAt' }
-    ]);
-    return list;
 }
 
 async function loadProductList(category) {
@@ -429,9 +459,12 @@ async function loadProductList(category) {
 
 async function loadOrderList(status) {
     const list = BizStore.listOrders(status ? { status } : null);
-    const totalAmount = list.reduce((s, o) => s + (o.status === 'COMPLETED' ? (o.totalAmount || 0) : 0), 0);
-    document.getElementById('bizorder-count').textContent = `订单数: ${list.length}`;
-    document.getElementById('bizorder-amount').textContent = `总成交额: ¥${fen2yuan(totalAmount)}`;
+    const PAID_STATUSES = new Set(['PAID', 'SHIPPED', 'COMPLETED']);
+    const totalAmount = list.reduce((s, o) => s + (PAID_STATUSES.has(o.status) ? (o.totalAmount || 0) : 0), 0);
+    const countEl = $('bizorder-count');
+    const amountEl = $('bizorder-amount');
+    if (countEl) countEl.textContent = `订单数: ${list.length}`;
+    if (amountEl) amountEl.textContent = `总成交额: ¥${fen2yuan(totalAmount)}`;
     renderTable('#bizorder-table tbody', list, [
         { key: 'id' },
         { key: 'buyerId' },
@@ -446,18 +479,18 @@ async function loadOrderList(status) {
     return list;
 }
 
-document.getElementById('biz-init').addEventListener('click', () => {
+bindClick('biz-init', () => {
     try {
         const info = BizStore.initDemoData();
-        showResult(document.getElementById('bizuser-register-result'), { code: 200, data: info });
+        showResult($('bizuser-register-result'), { code: 200, data: info });
         loadUserList(); loadProductList(); loadOrderList();
     } catch (e) {
-        showResult(document.getElementById('bizuser-register-result'), { code: 400, message: e.message });
+        showResult($('bizuser-register-result'), { code: 400, message: e.message });
     }
 });
 
-document.getElementById('bizuser-refresh').addEventListener('click', loadUserList);
-document.getElementById('bizuser-register').addEventListener('click', () => {
+bindClick('bizuser-refresh', loadUserList);
+bindClick('bizuser-register', () => {
     try {
         const u = BizStore.register(
             document.getElementById('bizuser-username').value,
@@ -472,7 +505,7 @@ document.getElementById('bizuser-register').addEventListener('click', () => {
         showResult(document.getElementById('bizuser-register-result'), { code: 400, message: e.message });
     }
 });
-document.getElementById('bizuser-login').addEventListener('click', () => {
+bindClick('bizuser-login', () => {
     try {
         const r = BizStore.login(
             document.getElementById('bizuser-login-u').value,
@@ -483,7 +516,7 @@ document.getElementById('bizuser-login').addEventListener('click', () => {
         showResult(document.getElementById('bizuser-login-result'), { code: 401, message: e.message });
     }
 });
-document.getElementById('bizuser-recharge').addEventListener('click', () => {
+bindClick('bizuser-recharge', () => {
     try {
         const id = parseInt(document.getElementById('bizuser-recharge-id').value, 10);
         const amount = parseInt(document.getElementById('bizuser-recharge-amount').value || '0', 10);
@@ -496,7 +529,7 @@ document.getElementById('bizuser-recharge').addEventListener('click', () => {
 });
 
 // ---- 账户交易流水 ----
-document.getElementById('txlog-query').addEventListener('click', () => {
+bindClick('txlog-query', () => {
     try {
         const uid = document.getElementById('txlog-userid').value;
         if (!uid) {
@@ -525,11 +558,11 @@ document.getElementById('txlog-query').addEventListener('click', () => {
     }
 });
 
-document.getElementById('bizprod-refresh').addEventListener('click', () => loadProductList());
-document.getElementById('bizprod-filter-btn').addEventListener('click', () => {
+bindClick('bizprod-refresh', () => loadProductList());
+bindClick('bizprod-filter-btn', () => {
     loadProductList(document.getElementById('bizprod-category-filter').value);
 });
-document.getElementById('bizprod-create').addEventListener('click', () => {
+bindClick('bizprod-create', () => {
     try {
         const name = document.getElementById('bizprod-name').value;
         const price = parseInt(document.getElementById('bizprod-price').value || '0', 10) * 100;
@@ -545,7 +578,7 @@ document.getElementById('bizprod-create').addEventListener('click', () => {
 });
 
 // ---- 商品搜索分页 ----
-document.getElementById('prodsearch-btn').addEventListener('click', () => {
+bindClick('prodsearch-btn', () => {
     try {
         const result = BizStore.searchProducts(
             document.getElementById('prodsearch-kw').value || '',
@@ -576,11 +609,11 @@ document.getElementById('prodsearch-btn').addEventListener('click', () => {
     }
 });
 
-document.getElementById('bizorder-refresh').addEventListener('click', () => loadOrderList());
-document.getElementById('bizorder-filter-btn').addEventListener('click', () => {
+bindClick('bizorder-refresh', () => loadOrderList());
+bindClick('bizorder-filter-btn', () => {
     loadOrderList(document.getElementById('bizorder-status-filter').value);
 });
-document.getElementById('bizorder-create').addEventListener('click', () => {
+bindClick('bizorder-create', () => {
     try {
         const o = BizStore.createOrder(
             parseInt(document.getElementById('bizorder-buyer').value, 10),
@@ -621,28 +654,47 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ====== 接口测试（模拟 HTTP 调用） ======
-document.getElementById('reg-run').addEventListener('click', () => {
+bindClick('reg-run', () => {
     const u = document.getElementById('reg-u').value;
     const p = document.getElementById('reg-p').value;
     const e = document.getElementById('reg-e').value;
-    const ok = UserValidator.validateUser(u, p, e);
-    showResult(document.getElementById('reg-result'),
-        ok ? { code: 200, message: '注册成功' } : { code: 400, message: '注册信息不合法' });
-});
-
-document.getElementById('login-run').addEventListener('click', () => {
-    const u = document.getElementById('login-u').value;
-    const p = document.getElementById('login-p').value;
-    if (u === 'admin' && p === 'Admin123') {
-        showResult(document.getElementById('login-result'),
-            { code: 200, message: '登录成功', token: 'mock-token-' + Date.now() });
+    const valid = UserValidator.validateUser(u, p, e);
+    if (valid) {
+        try {
+            // 接口测试注册成功时，也同步写入 BizStore，使用户管理列表可见
+            const user = BizStore.register(u, p, e, 'BUYER');
+            const { password, ...safe } = user;
+            showResult(document.getElementById('reg-result'), { code: 200, message: '注册成功', data: safe });
+            try { loadUserList(); } catch (err) { /* ignore */ }
+        } catch (err) {
+            showResult(document.getElementById('reg-result'), { code: 400, message: err.message || '注册失败' });
+        }
     } else {
-        showResult(document.getElementById('login-result'),
-            { code: 401, message: '用户名或密码错误' });
+        showResult(document.getElementById('reg-result'), { code: 400, message: '注册信息不合法' });
     }
 });
 
-document.getElementById('perm-run').addEventListener('click', () => {
+bindClick('login-run', () => {
+    const u = document.getElementById('login-u').value;
+    const p = document.getElementById('login-p').value;
+    try {
+        // 使用业务用户登录验证
+        const r = BizStore.login(u, p);
+        showResult(document.getElementById('login-result'),
+            { code: 200, message: '登录成功', data: r, token: 'mock-token-' + Date.now() });
+    } catch (err) {
+        // 回退：允许老版本演示账号 admin/Admin123
+        if (u === 'admin' && p === 'Admin123') {
+            showResult(document.getElementById('login-result'),
+                { code: 200, message: '登录成功', token: 'mock-token-' + Date.now() });
+        } else {
+            showResult(document.getElementById('login-result'),
+                { code: 401, message: err.message || '用户名或密码错误' });
+        }
+    }
+});
+
+bindClick('perm-run', () => {
     try {
         const perm = UserValidator.checkPermission(document.getElementById('perm-r').value);
         showResult(document.getElementById('perm-result'), { code: 200, permission: perm });
