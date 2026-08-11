@@ -15,6 +15,7 @@
         <button class="nav-btn" data-tab="user">用户校验</button>
         <button class="nav-btn" data-tab="api">接口测试</button>
         <button class="nav-btn" data-tab="test">运行测试</button>
+        <button class="nav-btn" data-tab="perf">性能测试</button>
     </nav>
 </header>
 
@@ -130,11 +131,39 @@
             <button class="btn-secondary test-btn" data-target="string">字符串单元测试</button>
             <button class="btn-secondary test-btn" data-target="user">用户校验单元测试</button>
             <button class="btn-secondary test-btn" data-target="api">HTTP 接口测试</button>
+            <button class="btn-secondary test-btn" data-target="restassured">RestAssured API 测试</button>
+            <button class="btn-secondary test-btn" data-target="ui">Playwright UI 测试</button>
             <button class="btn-secondary test-btn" data-target="suite">自动化测试套件</button>
         </div>
         <div id="test-summary" class="test-summary"></div>
         <div id="test-failures" class="test-failures"></div>
         <div id="test-log" class="log"></div>
+    </section>
+
+    <!-- 性能测试 -->
+    <section class="panel" id="panel-perf">
+        <h2>⚡ JMeter 性能测试</h2>
+        <p class="panel-desc">配置并发参数后执行压测，模拟 JMeter 多线程并发请求，实时展示响应时间、吞吐量、错误率等核心性能指标。</p>
+        <div class="row">
+            <div>
+                <label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">目标接口</label>
+                <select id="perf-api">
+                    <option value="calc">GET /api/calc (计算器加法)</option>
+                    <option value="login">POST /api/login (用户登录)</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">并发线程数</label>
+                <input type="number" id="perf-threads" value="20" min="1" max="200" style="width:100px">
+            </div>
+            <div>
+                <label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">每线程循环次数</label>
+                <input type="number" id="perf-loops" value="20" min="1" max="500" style="width:120px">
+            </div>
+            <button class="btn-primary" id="perf-run" style="align-self:flex-end">▶ 开始压测</button>
+        </div>
+        <div id="perf-summary" class="test-summary"></div>
+        <div id="perf-detail" class="result" style="display:none;"></div>
     </section>
 </main>
 

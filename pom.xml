@@ -10,7 +10,7 @@
     <packaging>jar</packaging>
 
     <name>Software Testing Demo</name>
-    <description>软件测试示例项目，包含单元测试、接口测试和自动化测试套件</description>
+    <description>软件测试示例项目，包含单元测试、接口测试、UI 自动化测试、性能测试和测试套件</description>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
@@ -18,56 +18,109 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.9.3</junit.version>
         <junit.platform.version>1.9.3</junit.platform.version>
+        <rest-assured.version>5.3.2</rest-assured.version>
+        <allure.version>2.24.0</allure.version>
+        <playwright.version>1.40.0</playwright.version>
+        <aspectj.version>1.9.20.1</aspectj.version>
     </properties>
 
     <dependencies>
-        <!-- JUnit 5 主依赖（测试范围） -->
+        <!-- ====== JUnit 5 ====== -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
-        <!-- 测试套件支持（测试范围） -->
         <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-suite</artifactId>
             <version>${junit.platform.version}</version>
             <scope>test</scope>
         </dependency>
-        <!-- JUnit Platform Launcher（主程序运行时调用，用于 /api/test/run 端点） -->
+        <!-- Launcher / Engine（主程序运行时调用，用于 /api/test/run 端点） -->
         <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-launcher</artifactId>
             <version>${junit.platform.version}</version>
         </dependency>
-        <!-- JUnit Jupiter Engine（运行时引擎，供 Launcher 执行测试用） -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
             <version>${junit.version}</version>
         </dependency>
-        <!-- JUnit Platform Suite Engine（运行时引擎，供 Launcher 运行套件） -->
         <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-suite-engine</artifactId>
             <version>${junit.platform.version}</version>
         </dependency>
+
+        <!-- ====== RestAssured：API 自动化测试 ====== -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <version>${rest-assured.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>json-path</artifactId>
+            <version>${rest-assured.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ====== Allure 测试报告 ====== -->
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-junit5</artifactId>
+            <version>${allure.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ====== Playwright：UI 自动化测试 ====== -->
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>${playwright.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Surefire 插件：负责执行测试并生成报告 -->
+            <!-- Surefire：执行测试 + Allure AspectJ 织入 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.1.2</version>
                 <configuration>
                     <encoding>UTF-8</encoding>
-                    <argLine>-Dfile.encoding=UTF-8</argLine>
-                    <!-- 默认执行所有测试；指定 -Dtest=AutomationTestSuite 时只跑套件 -->
+                    <argLine>
+                        -Dfile.encoding=UTF-8
+                        -javaagent:"${settings.localRepository}/org/aspectj/aspectjweaver/${aspectj.version}/aspectjweaver-${aspectj.version}.jar"
+                    </argLine>
+                    <systemProperties>
+                        <property>
+                            <name>allure.results.directory</name>
+                            <value>${project.build.directory}/allure-results</value>
+                        </property>
+                        <property>
+                            <name>junit.jupiter.execution.parallel.enabled</name>
+                            <value>false</value>
+                        </property>
+                    </systemProperties>
+                    <!-- 默认排除 Playwright（需额外安装浏览器），用 -Dgroups=ui 显式启用 -->
+                    <excludedGroups>ui</excludedGroups>
                 </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.aspectj</groupId>
+                        <artifactId>aspectjweaver</artifactId>
+                        <version>${aspectj.version}</version>
+                    </dependency>
+                </dependencies>
             </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -78,6 +131,7 @@
                     <encoding>UTF-8</encoding>
                 </configuration>
             </plugin>
+
             <!-- Exec 插件：启动前后端一体应用 -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -87,6 +141,17 @@
                     <mainClass>com.example.web.WebApplication</mainClass>
                     <includePluginDependencies>false</includePluginDependencies>
                     <classpathScope>test</classpathScope>
+                </configuration>
+            </plugin>
+
+            <!-- Allure 报告生成插件：mvn allure:report -->
+            <plugin>
+                <groupId>io.qameta.allure</groupId>
+                <artifactId>allure-maven</artifactId>
+                <version>2.12.0</version>
+                <configuration>
+                    <reportVersion>${allure.version}</reportVersion>
+                    <resultsDirectory>${project.build.directory}/allure-results</resultsDirectory>
                 </configuration>
             </plugin>
         </plugins>

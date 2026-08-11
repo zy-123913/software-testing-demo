@@ -72,13 +72,15 @@ public class WebApplication {
         server.createContext("/api/user", new UserHandler());
         // 测试执行 API
         server.createContext("/api/test/run", new TestRunHandler());
+        // 性能测试 API（模拟 JMeter 压测）
+        server.createContext("/api/test/perf", new PerfHandler());
 
         // 复用用户接口（注册 / 登录 / 权限）
         server.createContext("/api/register", new RegisterHandler());
         server.createContext("/api/login", new LoginHandler());
         server.createContext("/api/permission", new PermissionHandler());
 
-        server.setExecutor(null);
+        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(64));
         server.start();
     }
 
@@ -324,6 +326,14 @@ public class WebApplication {
                         builder.selectors(DiscoverySelectors.selectClass(
                                 "com.example.api.UserApiTest"));
                         break;
+                    case "restassured":
+                        builder.selectors(DiscoverySelectors.selectClass(
+                                "com.example.api.UserApiRestAssuredTest"));
+                        break;
+                    case "ui":
+                        builder.selectors(DiscoverySelectors.selectClass(
+                                "com.example.ui.WebUiTest"));
+                        break;
                     case "suite":
                         builder.selectors(DiscoverySelectors.selectClass(
                                 "com.example.automation.AutomationTestSuite"));
@@ -366,6 +376,96 @@ public class WebApplication {
                 sendJson(ex, 200, result);
             } catch (Exception e) {
                 sendJson(ex, 500, error(500, "测试执行失败: " + e.getMessage()));
+            }
+        }
+    }
+
+    // ====== 性能测试 API（模拟 JMeter 并发压测） ======
+    class PerfHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange ex) throws IOException {
+            try {
+                Map<String, String> p = parseQuery(ex.getRequestURI().getQuery());
+                int threads = Integer.parseInt(p.getOrDefault("threads", "20"));
+                int loops = Integer.parseInt(p.getOrDefault("loops", "20"));
+                String api = p.getOrDefault("api", "calc");
+                int targetPort = parseInt(System.getenv().getOrDefault("PORT", String.valueOf(PORT)));
+
+                // 并发压测：多线程发送 HTTP 请求
+                java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(threads);
+                java.util.List<Long> elapsedList = java.util.Collections.synchronizedList(new ArrayList<>());
+                java.util.concurrent.atomic.AtomicInteger success = new java.util.concurrent.atomic.AtomicInteger(0);
+                java.util.concurrent.atomic.AtomicInteger failed = new java.util.concurrent.atomic.AtomicInteger(0);
+
+                long startTime = System.currentTimeMillis();
+
+                for (int i = 0; i < threads; i++) {
+                    new Thread(() -> {
+                        try {
+                            for (int j = 0; j < loops; j++) {
+                                long t0 = System.currentTimeMillis();
+                                try {
+                                    java.net.URL url;
+                                    if ("login".equals(api)) {
+                                        url = new java.net.URL("http://localhost:" + targetPort +
+                                                "/api/login?username=admin&password=Admin123");
+                                    } else {
+                                        int a = (int) (Math.random() * 1000);
+                                        int b = (int) (Math.random() * 1000);
+                                        url = new java.net.URL("http://localhost:" + targetPort +
+                                                "/api/calc?a=" + a + "&b=" + b + "&op=add");
+                                    }
+                                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                                    conn.setConnectTimeout(5000);
+                                    conn.setReadTimeout(10000);
+                                    int code = conn.getResponseCode();
+                                    conn.disconnect();
+                                    if (code == 200) success.incrementAndGet();
+                                    else failed.incrementAndGet();
+                                } catch (Exception e) {
+                                    failed.incrementAndGet();
+                                }
+                                elapsedList.add(System.currentTimeMillis() - t0);
+                            }
+                        } finally {
+                            latch.countDown();
+                        }
+                    }).start();
+                }
+
+                latch.await(60, java.util.concurrent.TimeUnit.SECONDS);
+                long totalTime = System.currentTimeMillis() - startTime;
+
+                // 统计
+                java.util.Collections.sort(elapsedList);
+                int total = threads * loops;
+                double avg = elapsedList.stream().mapToLong(l -> l).average().orElse(0);
+                long min = elapsedList.isEmpty() ? 0 : elapsedList.get(0);
+                long max = elapsedList.isEmpty() ? 0 : elapsedList.get(elapsedList.size() - 1);
+                long p90 = elapsedList.isEmpty() ? 0 : elapsedList.get((int) (elapsedList.size() * 0.9));
+                long p95 = elapsedList.isEmpty() ? 0 : elapsedList.get((int) (elapsedList.size() * 0.95));
+                double tps = totalTime > 0 ? (total * 1000.0 / totalTime) : 0;
+                double errorRate = total > 0 ? (failed.get() * 100.0 / total) : 0;
+
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("code", 200);
+                result.put("api", "GET /api/" + api);
+                result.put("threads", threads);
+                result.put("loops", loops);
+                result.put("totalRequests", total);
+                result.put("success", success.get());
+                result.put("failed", failed.get());
+                result.put("errorRate", String.format("%.2f%%", errorRate));
+                result.put("totalTime", totalTime + " ms");
+                result.put("avgResponse", String.format("%.1f ms", avg));
+                result.put("minResponse", min + " ms");
+                result.put("maxResponse", max + " ms");
+                result.put("p90", p90 + " ms");
+                result.put("p95", p95 + " ms");
+                result.put("tps", String.format("%.1f req/s", tps));
+                sendJson(ex, 200, result);
+            } catch (Exception e) {
+                sendJson(ex, 500, error(500, "性能测试失败: " + e.getMessage()));
             }
         }
     }

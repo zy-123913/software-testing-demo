@@ -125,7 +125,10 @@ document.querySelectorAll('.test-btn').forEach(btn => {
 
         const names = {
             all: '全部测试', calculator: '计算器单元测试', string: '字符串单元测试',
-            user: '用户校验单元测试', api: 'HTTP 接口测试', suite: '自动化测试套件'
+            user: '用户校验单元测试', api: 'HTTP 接口测试',
+            restassured: 'RestAssured API 自动化测试',
+            ui: 'Playwright UI 自动化测试',
+            suite: '自动化测试套件'
         };
         logLine(`▶ 开始执行：${names[target]}`, 'info');
         logLine(`  目标：target=${target}`, 'info');
@@ -174,4 +177,75 @@ document.querySelectorAll('.test-btn').forEach(btn => {
 
         document.querySelectorAll('.test-btn').forEach(b => b.disabled = false);
     });
+});
+
+// ====== 性能测试 ======
+const $perfSummary = document.getElementById('perf-summary');
+const $perfDetail = document.getElementById('perf-detail');
+const $perfRun = document.getElementById('perf-run');
+
+$perfRun.addEventListener('click', async () => {
+    const apiName = document.getElementById('perf-api').value;
+    const threads = document.getElementById('perf-threads').value;
+    const loops = document.getElementById('perf-loops').value;
+
+    $perfRun.disabled = true;
+    $perfRun.textContent = '⏳ 压测进行中...';
+    $perfSummary.classList.remove('show', 'ok', 'fail');
+    $perfDetail.style.display = 'none';
+
+    const total = threads * loops;
+    const start = Date.now();
+    const data = await api(`/api/test/perf?api=${apiName}&threads=${threads}&loops=${loops}`);
+    const cost = ((Date.now() - start) / 1000).toFixed(2);
+
+    if (!data || data.code !== 200) {
+        $perfDetail.style.display = 'block';
+        $perfDetail.className = 'result err';
+        $perfDetail.textContent = '压测失败: ' + JSON.stringify(data);
+        $perfRun.disabled = false;
+        $perfRun.textContent = '▶ 开始压测';
+        return;
+    }
+
+    const allOk = data.failed === 0;
+    $perfSummary.innerHTML = `
+        <div class="stat"><span class="num">${data.totalRequests}</span><span class="label">总请求数</span></div>
+        <div class="stat"><span class="num" style="color:#86efac">${data.success}</span><span class="label">成功</span></div>
+        <div class="stat"><span class="num" style="color:#fca5a5">${data.failed}</span><span class="label">失败</span></div>
+        <div class="stat"><span class="num" style="color:#fcd34d">${data.errorRate}</span><span class="label">错误率</span></div>
+        <div class="stat"><span class="num" style="color:#93c5fd">${data.tps}</span><span class="label">吞吐量(TPS)</span></div>
+        <div class="stat"><span class="num" style="color:#c4b5fd">${data.avgResponse}</span><span class="label">平均响应</span></div>
+        <div class="stat"><span class="num" style="color:#f0abfc">${data.p95}</span><span class="label">P95 响应</span></div>
+        <div class="stat"><span class="num" style="color:#67e8f9">${data.totalTime}</span><span class="label">总耗时</span></div>
+    `;
+    $perfSummary.classList.add('show');
+    $perfSummary.classList.add(allOk ? 'ok' : 'fail');
+
+    $perfDetail.style.display = 'block';
+    $perfDetail.className = 'result ' + (allOk ? 'ok' : 'err');
+    $perfDetail.textContent =
+        `性能测试报告\n` +
+        `═══════════════════════════════════════\n` +
+        `目标接口:   ${data.api}\n` +
+        `并发线程:   ${data.threads}\n` +
+        `循环次数:   ${data.loops}\n` +
+        `───────────────────────────────────────\n` +
+        `总请求数:   ${data.totalRequests}\n` +
+        `成功请求:   ${data.success}\n` +
+        `失败请求:   ${data.failed}\n` +
+        `错误率:     ${data.errorRate}\n` +
+        `───────────────────────────────────────\n` +
+        `总耗时:     ${data.totalTime}\n` +
+        `平均响应:   ${data.avgResponse}\n` +
+        `最小响应:   ${data.minResponse}\n` +
+        `最大响应:   ${data.maxResponse}\n` +
+        `P90 响应:   ${data.p90}\n` +
+        `P95 响应:   ${data.p95}\n` +
+        `吞吐量 TPS: ${data.tps}\n` +
+        `═══════════════════════════════════════\n` +
+        `结论: ${allOk ? '✔ 所有请求成功，系统性能良好' : '⚠ 存在失败请求，需排查'}`;
+
+    $perfRun.disabled = false;
+    $perfRun.textContent = '▶ 开始压测';
 });
