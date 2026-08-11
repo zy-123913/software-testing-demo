@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>软件测试演示平台</title>
+    <meta name="version" content="v2.0-enterprise-20260812">
+    <title>软件测试演示平台 · 企业级完整项目版</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,6 +14,9 @@
         <button class="nav-btn active" data-tab="calc">计算器</button>
         <button class="nav-btn" data-tab="str">字符串工具</button>
         <button class="nav-btn" data-tab="user">用户校验</button>
+        <button class="nav-btn" data-tab="bizuser">👥 用户管理</button>
+        <button class="nav-btn" data-tab="bizprod">📦 商品管理</button>
+        <button class="nav-btn" data-tab="bizorder">🛒 订单交易</button>
         <button class="nav-btn" data-tab="api">接口测试</button>
         <button class="nav-btn" data-tab="test">运行测试</button>
         <button class="nav-btn" data-tab="perf">性能测试</button>
@@ -87,6 +91,178 @@
         <div class="result" id="user-result"></div>
     </section>
 
+    <section class="panel" id="panel-bizuser">
+        <h2>👥 电商用户管理</h2>
+        <p class="panel-desc">基于三层架构（Entity/DAO/Service）的电商用户系统，支持注册、登录、充值、列表查询等完整业务操作。</p>
+        <div class="row">
+            <button class="btn-primary" id="biz-init">🔄 初始化演示数据</button>
+            <button class="btn-secondary" id="bizuser-refresh">🔃 刷新用户列表</button>
+            <span class="badge" id="bizuser-count">用户数: 0</span>
+        </div>
+        <div class="sub-panel">
+            <h3>📝 注册新用户</h3>
+            <div class="row">
+                <input type="text" id="bizuser-username" placeholder="用户名" value="buyer02">
+                <input type="text" id="bizuser-password" placeholder="密码" value="Buyer123">
+                <input type="text" id="bizuser-email" placeholder="邮箱" value="buyer02@example.com">
+                <select id="bizuser-role">
+                    <option value="BUYER">买家 BUYER</option>
+                    <option value="SELLER">卖家 SELLER</option>
+                    <option value="ADMIN">管理员 ADMIN</option>
+                </select>
+                <button class="btn-primary" id="bizuser-register">注册用户</button>
+            </div>
+            <div class="result small" id="bizuser-register-result"></div>
+        </div>
+        <div class="sub-panel">
+            <h3>🔐 用户登录</h3>
+            <div class="row">
+                <input type="text" id="bizuser-login-u" placeholder="用户名" value="buyer01">
+                <input type="text" id="bizuser-login-p" placeholder="密码" value="Buyer123">
+                <button class="btn-primary" id="bizuser-login">登录</button>
+            </div>
+            <div class="result small" id="bizuser-login-result"></div>
+        </div>
+        <div class="sub-panel">
+            <h3>💰 账户充值</h3>
+            <div class="row">
+                <input type="number" id="bizuser-recharge-id" placeholder="用户ID">
+                <input type="number" id="bizuser-recharge-amount" placeholder="充值金额(元)" value="100">
+                <button class="btn-primary" id="bizuser-recharge">充值</button>
+            </div>
+            <div class="result small" id="bizuser-recharge-result"></div>
+        </div>
+        <h3 style="margin:16px 0 12px;color:#1e3c72;">📋 用户列表</h3>
+        <div class="table-wrap">
+            <table class="data-table" id="bizuser-table">
+                <thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>余额(元)</th><th>创建时间</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel" id="panel-bizprod">
+        <h2>📦 电商商品管理</h2>
+        <p class="panel-desc">商品库存管理系统，支持商品上架、分类查询、库存预警等核心业务功能。</p>
+        <div class="row">
+            <button class="btn-secondary" id="bizprod-refresh">🔃 刷新商品列表</button>
+            <select id="bizprod-category-filter">
+                <option value="">全部分类</option>
+                <option value="电子产品">电子产品</option>
+                <option value="电脑配件">电脑配件</option>
+                <option value="服装">服装</option>
+                <option value="食品">食品</option>
+            </select>
+            <button class="btn-secondary" id="bizprod-filter-btn">筛选</button>
+            <span class="badge" id="bizprod-count">商品数: 0</span>
+        </div>
+        <div class="sub-panel">
+            <h3>➕ 上架新商品</h3>
+            <div class="row two-col">
+                <div>
+                    <label>商品名称</label>
+                    <input type="text" id="bizprod-name" placeholder="如：小米手环8" value="小米手环8">
+                </div>
+                <div>
+                    <label>所属分类</label>
+                    <select id="bizprod-category">
+                        <option value="电子产品">电子产品</option>
+                        <option value="电脑配件">电脑配件</option>
+                        <option value="服装">服装</option>
+                        <option value="食品">食品</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row two-col">
+                <div>
+                    <label>价格 (元)</label>
+                    <input type="number" id="bizprod-price" placeholder="如：299" value="299">
+                </div>
+                <div>
+                    <label>库存数量</label>
+                    <input type="number" id="bizprod-stock" placeholder="如：500" value="500">
+                </div>
+            </div>
+            <div class="row">
+                <label style="font-size:13px;color:#666;">卖家用户ID：</label>
+                <input type="number" id="bizprod-seller" placeholder="选择卖家ID" style="max-width:150px">
+                <button class="btn-primary" id="bizprod-create">上架商品</button>
+            </div>
+            <div class="result small" id="bizprod-create-result"></div>
+        </div>
+        <h3 style="margin:16px 0 12px;color:#1e3c72;">📋 商品列表</h3>
+        <div class="table-wrap">
+            <table class="data-table" id="bizprod-table">
+                <thead><tr><th>ID</th><th>商品名称</th><th>分类</th><th>价格(元)</th><th>库存</th><th>卖家ID</th><th>状态</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel" id="panel-bizorder">
+        <h2>🛒 电商订单交易</h2>
+        <p class="panel-desc">完整电商订单生命周期：下单 → 支付 → 发货 → 收货完成，支持取消订单、按状态筛选等业务操作。</p>
+        <div class="row">
+            <button class="btn-secondary" id="bizorder-refresh">🔃 刷新订单列表</button>
+            <select id="bizorder-status-filter">
+                <option value="">全部状态</option>
+                <option value="PENDING">待支付</option>
+                <option value="PAID">已支付</option>
+                <option value="SHIPPED">已发货</option>
+                <option value="COMPLETED">已完成</option>
+                <option value="CANCELLED">已取消</option>
+            </select>
+            <button class="btn-secondary" id="bizorder-filter-btn">筛选</button>
+            <span class="badge" id="bizorder-count">订单数: 0</span>
+            <span class="badge ok" id="bizorder-amount">总成交额: ¥0</span>
+        </div>
+        <div class="sub-panel">
+            <h3>🛍️ 创建订单（下单）</h3>
+            <div class="row two-col">
+                <div>
+                    <label>买家用户ID</label>
+                    <input type="number" id="bizorder-buyer" placeholder="选择买家ID">
+                </div>
+                <div>
+                    <label>收货地址</label>
+                    <input type="text" id="bizorder-address" placeholder="北京市朝阳区xxx街道" value="北京市朝阳区望京SOHO">
+                </div>
+            </div>
+            <div class="row two-col">
+                <div>
+                    <label>商品ID</label>
+                    <input type="number" id="bizorder-product" placeholder="选择商品ID">
+                </div>
+                <div>
+                    <label>购买数量</label>
+                    <input type="number" id="bizorder-quantity" placeholder="1" value="1" min="1">
+                </div>
+            </div>
+            <div class="row">
+                <button class="btn-primary" id="bizorder-create">下单购买</button>
+            </div>
+            <div class="result small" id="bizorder-create-result"></div>
+        </div>
+        <div class="sub-panel">
+            <h3>📦 订单状态流转操作</h3>
+            <div class="row">
+                <input type="number" id="bizorder-action-id" placeholder="输入订单ID" style="max-width:150px">
+                <input type="number" id="bizorder-action-opid" placeholder="操作人ID" style="max-width:150px">
+                <button class="btn-secondary" data-orderaction="ship">🚚 发货(卖家)</button>
+                <button class="btn-secondary" data-orderaction="complete">✅ 确认收货(买家)</button>
+                <button class="btn-secondary" data-orderaction="cancel">❌ 取消订单</button>
+            </div>
+            <div class="result small" id="bizorder-action-result"></div>
+        </div>
+        <h3 style="margin:16px 0 12px;color:#1e3c72;">📋 订单列表</h3>
+        <div class="table-wrap">
+            <table class="data-table" id="bizorder-table">
+                <thead><tr><th>订单ID</th><th>买家</th><th>商品</th><th>数量</th><th>金额(元)</th><th>状态</th><th>收货地址</th><th>创建时间</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+
     <section class="panel" id="panel-api">
         <h2>🌐 HTTP 接口测试</h2>
         <div class="sub-panel">
@@ -120,7 +296,6 @@
 
     <section class="panel" id="panel-test">
         <h2>🧪 运行测试套件</h2>
-        <p class="panel-desc">点击按钮执行对应测试套件，前端模拟 JUnit 5 引擎的执行过程，展示与真实后端一致的结果格式。</p>
         <div class="row">
             <button class="btn-primary test-btn" data-target="all">▶ 运行全部测试</button>
             <button class="btn-secondary test-btn" data-target="calculator">计算器单元测试</button>
@@ -128,6 +303,8 @@
             <button class="btn-secondary test-btn" data-target="user">用户校验单元测试</button>
             <button class="btn-secondary test-btn" data-target="api">HTTP 接口测试</button>
             <button class="btn-secondary test-btn" data-target="restassured">RestAssured API 测试</button>
+            <button class="btn-secondary test-btn" data-target="biz">电商业务单元测试</button>
+            <button class="btn-secondary test-btn" data-target="bizapi">电商业务API集成测试</button>
             <button class="btn-secondary test-btn" data-target="ui">Playwright UI 测试</button>
             <button class="btn-secondary test-btn" data-target="suite">自动化测试套件</button>
         </div>
@@ -145,6 +322,8 @@
                 <select id="perf-api">
                     <option value="calc">GET /api/calc (计算器加法)</option>
                     <option value="login">POST /api/login (用户登录)</option>
+                    <option value="bizuser">GET /biz/user/list (用户列表)</option>
+                    <option value="bizprod">GET /biz/product/list (商品列表)</option>
                 </select>
             </div>
             <div>
@@ -163,7 +342,7 @@
 </main>
 
 <footer class="footer">
-    <span>JUnit 5 软件测试演示平台 · 前后端一体化 · <a href="https://gitee.com" target="_blank" style="color:inherit;text-decoration:underline">源码托管于 Gitee</a></span>
+    <span>JUnit 5 软件测试演示平台 · 前后端一体化 · 三层架构 · 电商业务系统</span>
 </footer>
 
 <script src="app.js"></script>

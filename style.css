@@ -88,10 +88,14 @@ body {
 }
 
 .panel-desc {
-    color: #666;
-    font-size: 13px;
+    color: #6b7280;
+    font-size: 14px;
     margin-bottom: 20px;
     line-height: 1.6;
+    padding: 12px 16px;
+    background: #f0f9ff;
+    border-left: 4px solid #0ea5e9;
+    border-radius: 6px;
 }
 
 .sub-panel {
@@ -180,6 +184,22 @@ input:focus, select:focus {
     background: #dde7ff;
 }
 
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    background: #e0e7ff;
+    color: #3730a3;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.badge.ok {
+    background: #d1fae5;
+    color: #065f46;
+}
+
 .result {
     background: #f8faff;
     border-radius: 10px;
@@ -207,6 +227,64 @@ input:focus, select:focus {
     background: #fef2f2;
     color: #991b1b;
 }
+
+.table-wrap {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid #e0e6ef;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: white;
+}
+
+.data-table thead {
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    color: white;
+}
+
+.data-table th, .data-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid #eef2ff;
+}
+
+.data-table th {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.data-table tbody tr:hover {
+    background: #f8faff;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.status-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-PENDING   { background: #fef3c7; color: #92400e; }
+.status-PAID      { background: #dbeafe; color: #1e40af; }
+.status-SHIPPED   { background: #e0e7ff; color: #3730a3; }
+.status-COMPLETED { background: #d1fae5; color: #065f46; }
+.status-CANCELLED { background: #fee2e2; color: #991b1b; }
+
+.status-AVAILABLE { background: #d1fae5; color: #065f46; }
+.status-OFF_SHELF { background: #fee2e2; color: #991b1b; }
+
+.role-ADMIN  { background: #fce7f3; color: #9d174d; }
+.role-SELLER { background: #dbeafe; color: #1e40af; }
+.role-BUYER  { background: #e0e7ff; color: #3730a3; }
 
 .test-summary {
     display: none;
@@ -261,7 +339,7 @@ input:focus, select:focus {
     padding: 16px 20px;
     border-radius: 10px;
     line-height: 1.6;
-    max-height: 400px;
+    max-height: 300px;
     overflow-y: auto;
     display: none;
 }
@@ -286,4 +364,6 @@ input:focus, select:focus {
     .header { padding: 0 16px; }
     .panel { padding: 20px; }
     .logo { font-size: 18px; }
+    .data-table { font-size: 12px; }
+    .data-table th, .data-table td { padding: 8px 10px; }
 }
