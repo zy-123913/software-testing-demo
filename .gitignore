@@ -19,3 +19,9 @@ Thumbs.db
 
 # 本地快捷方式
 *.url
+
+# Allure / AspectJ 临时报告
+allure-results/
+ajcore.*.txt
+*.dump
+*.dumpstream

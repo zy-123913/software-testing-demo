@@ -27,7 +27,7 @@ import static org.hamcrest.Matchers.*;
 class UserApiRestAssuredTest {
 
     @RegisterExtension
-    static final WebServerExtension server = new WebServerExtension(8088);
+    static final WebServerExtension server = new WebServerExtension();
 
     @BeforeAll
     static void setUp() {

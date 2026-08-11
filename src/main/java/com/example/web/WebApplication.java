@@ -35,32 +35,48 @@ import java.util.Map;
  */
 public class WebApplication {
 
-    private static final int PORT = 8080;
+    private static final int DEFAULT_PORT = 8099;
     private HttpServer server;
+    private int actualPort = -1;
 
     private final Calculator calculator = new Calculator();
     private final StringUtils stringUtils = new StringUtils();
     private final UserValidator userValidator = new UserValidator();
 
+    // ====== 电商业务三层架构（订单 / 商品 / 用户） ======
+    private final com.example.dao.UserDao userDao = new com.example.dao.impl.InMemoryUserDao();
+    private final com.example.dao.ProductDao productDao = new com.example.dao.impl.InMemoryProductDao();
+    private final com.example.dao.OrderDao orderDao = new com.example.dao.impl.InMemoryOrderDao();
+    private final com.example.service.UserService userService = new com.example.service.UserService(userDao);
+    private final com.example.service.ProductService productService = new com.example.service.ProductService(productDao);
+    private final com.example.service.OrderService orderService = new com.example.service.OrderService(orderDao, userService, productService);
+
+    private final com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+
     public static void main(String[] args) throws Exception {
-        // 云平台（Render/Heroku 等）通过 PORT 环境变量指定端口；本地默认 8080
-        int port = parseInt(System.getenv().getOrDefault("PORT", String.valueOf(PORT)));
+        // 优先级：系统属性 -Dserver.port > 环境变量 PORT > 默认 8099
+        String sysPort = System.getProperty("server.port");
+        String envPort = System.getenv().get("PORT");
+        int port = sysPort != null ? parseInt(sysPort)
+                : envPort != null ? parseInt(envPort)
+                : DEFAULT_PORT;
         WebApplication app = new WebApplication();
-        app.start(port);
+        int actual = app.start(port);
         System.out.println("============================================");
         System.out.println("  软件测试演示平台已启动");
-        System.out.println("  访问地址: http://localhost:" + port + "/");
+        System.out.println("  访问地址: http://localhost:" + actual + "/");
         System.out.println("  按 Ctrl+C 停止服务");
         System.out.println("============================================");
     }
 
     private static int parseInt(String s) {
         try { return Integer.parseInt(s.trim()); }
-        catch (Exception e) { return PORT; }
+        catch (Exception e) { return DEFAULT_PORT; }
     }
 
-    public void start(int port) throws IOException {
+    public int start(int port) throws IOException {
         server = HttpServer.create(new InetSocketAddress(port), 0);
+        actualPort = server.getAddress().getPort();
 
         // 静态资源（前端页面）
         server.createContext("/", new StaticHandler());
@@ -80,8 +96,30 @@ public class WebApplication {
         server.createContext("/api/login", new LoginHandler());
         server.createContext("/api/permission", new PermissionHandler());
 
+        // ====== 电商业务 REST API（用户/商品/订单 CRUD） ======
+        server.createContext("/biz/user/list",     new BizUserHandler("list"));
+        server.createContext("/biz/user/get",      new BizUserHandler("get"));
+        server.createContext("/biz/user/register", new BizUserHandler("register"));
+        server.createContext("/biz/user/login",    new BizUserHandler("login"));
+        server.createContext("/biz/user/recharge", new BizUserHandler("recharge"));
+        server.createContext("/biz/product/list",  new BizProductHandler("list"));
+        server.createContext("/biz/product/get",   new BizProductHandler("get"));
+        server.createContext("/biz/product/create",new BizProductHandler("create"));
+        server.createContext("/biz/order/create",  new BizOrderHandler("create"));
+        server.createContext("/biz/order/ship",    new BizOrderHandler("ship"));
+        server.createContext("/biz/order/complete",new BizOrderHandler("complete"));
+        server.createContext("/biz/order/cancel",  new BizOrderHandler("cancel"));
+        server.createContext("/biz/order/list",    new BizOrderHandler("list"));
+        server.createContext("/biz/order/get",     new BizOrderHandler("get"));
+        server.createContext("/biz/init",          new BizInitHandler());
+
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(64));
         server.start();
+        return actualPort;
+    }
+
+    public int getPort() {
+        return actualPort;
     }
 
     public void stop() {
@@ -117,9 +155,7 @@ public class WebApplication {
     }
 
     private String toJson(Object obj) {
-        StringBuilder sb = new StringBuilder();
-        appendJson(sb, obj);
-        return sb.toString();
+        return gson.toJson(obj);
     }
 
     @SuppressWarnings("unchecked")
@@ -338,6 +374,15 @@ public class WebApplication {
                         builder.selectors(DiscoverySelectors.selectClass(
                                 "com.example.automation.AutomationTestSuite"));
                         break;
+                    case "biz":
+                        builder.selectors(
+                                DiscoverySelectors.selectClass("com.example.service.UserServiceTest"),
+                                DiscoverySelectors.selectClass("com.example.service.OrderServiceTest"));
+                        break;
+                    case "bizapi":
+                        builder.selectors(DiscoverySelectors.selectClass(
+                                "com.example.api.BizApiIntegrationTest"));
+                        break;
                     default: // all
                         builder.selectors(DiscoverySelectors.selectPackage("com.example"));
                 }
@@ -389,7 +434,7 @@ public class WebApplication {
                 int threads = Integer.parseInt(p.getOrDefault("threads", "20"));
                 int loops = Integer.parseInt(p.getOrDefault("loops", "20"));
                 String api = p.getOrDefault("api", "calc");
-                int targetPort = parseInt(System.getenv().getOrDefault("PORT", String.valueOf(PORT)));
+                int targetPort = parseInt(System.getenv().getOrDefault("PORT", String.valueOf(actualPort > 0 ? actualPort : DEFAULT_PORT)));
 
                 // 并发压测：多线程发送 HTTP 请求
                 java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(threads);
@@ -409,6 +454,12 @@ public class WebApplication {
                                     if ("login".equals(api)) {
                                         url = new java.net.URL("http://localhost:" + targetPort +
                                                 "/api/login?username=admin&password=Admin123");
+                                    } else if ("bizuser".equals(api)) {
+                                        url = new java.net.URL("http://localhost:" + targetPort +
+                                                "/biz/user/list");
+                                    } else if ("bizprod".equals(api)) {
+                                        url = new java.net.URL("http://localhost:" + targetPort +
+                                                "/biz/product/list");
                                     } else {
                                         int a = (int) (Math.random() * 1000);
                                         int b = (int) (Math.random() * 1000);
@@ -467,6 +518,119 @@ public class WebApplication {
             } catch (Exception e) {
                 sendJson(ex, 500, error(500, "性能测试失败: " + e.getMessage()));
             }
+        }
+    }
+
+    // ====== 电商业务 Handler：统一 try-catch + BusinessException 转 JSON ======
+    abstract class BizBaseHandler implements HttpHandler {
+        @Override
+        public final void handle(HttpExchange ex) throws IOException {
+            try {
+                Map<String, String> p = parseQuery(ex.getRequestURI().getQuery());
+                doHandle(ex, p);
+            } catch (com.example.common.BusinessException be) {
+                sendJson(ex, be.getCode() >= 400 ? be.getCode() : 400, error(be.getCode(), be.getMessage()));
+            } catch (Exception e) {
+                sendJson(ex, 500, error(500, "服务器错误: " + e.getMessage()));
+            }
+        }
+        protected abstract void doHandle(HttpExchange ex, Map<String, String> p) throws Exception;
+    }
+
+    // ---- 用户业务 ----
+    class BizUserHandler extends BizBaseHandler {
+        private final String action;
+        public BizUserHandler(String action) { this.action = action; }
+        @Override
+        protected void doHandle(HttpExchange ex, Map<String, String> p) throws Exception {
+            Object result;
+            switch (action) {
+                case "list":     result = userService.listAll(); break;
+                case "get":      result = userService.getById(Long.valueOf(p.get("id"))); break;
+                case "register": result = userService.register(p.get("username"), p.get("password"), p.get("email"), p.getOrDefault("role", "BUYER")); break;
+                case "login":    result = userService.login(p.get("username"), p.get("password")); break;
+                case "recharge": result = userService.recharge(Long.valueOf(p.get("userId")), Integer.parseInt(p.get("amount"))); break;
+                default: throw new com.example.common.BusinessException(404, "未知操作");
+            }
+            sendJson(ex, 200, ok(result));
+        }
+    }
+
+    // ---- 商品业务 ----
+    class BizProductHandler extends BizBaseHandler {
+        private final String action;
+        public BizProductHandler(String action) { this.action = action; }
+        @Override
+        protected void doHandle(HttpExchange ex, Map<String, String> p) throws Exception {
+            Object result;
+            switch (action) {
+                case "list":
+                    if (p.containsKey("category")) result = productService.listByCategory(p.get("category"));
+                    else result = productService.listAll();
+                    break;
+                case "get":   result = productService.getById(Long.valueOf(p.get("id"))); break;
+                case "create":result = productService.create(
+                        p.get("name"),
+                        Integer.valueOf(p.get("price")),
+                        Integer.valueOf(p.getOrDefault("stock", "0")),
+                        p.get("category"),
+                        Long.valueOf(p.get("sellerId")));
+                    break;
+                default: throw new com.example.common.BusinessException(404, "未知操作");
+            }
+            sendJson(ex, 200, ok(result));
+        }
+    }
+
+    // ---- 订单业务 ----
+    class BizOrderHandler extends BizBaseHandler {
+        private final String action;
+        public BizOrderHandler(String action) { this.action = action; }
+        @Override
+        protected void doHandle(HttpExchange ex, Map<String, String> p) throws Exception {
+            Object result;
+            switch (action) {
+                case "create":   result = orderService.create(
+                        Long.valueOf(p.get("buyerId")),
+                        Long.valueOf(p.get("productId")),
+                        Integer.valueOf(p.getOrDefault("quantity", "1")),
+                        p.get("address"));
+                    break;
+                case "ship":     result = orderService.ship(Long.valueOf(p.get("orderId")), Long.valueOf(p.get("sellerId"))); break;
+                case "complete": result = orderService.complete(Long.valueOf(p.get("orderId")), Long.valueOf(p.get("buyerId"))); break;
+                case "cancel":   result = orderService.cancel(Long.valueOf(p.get("orderId")), Long.valueOf(p.get("operatorId"))); break;
+                case "list":
+                    if (p.containsKey("buyerId")) result = orderService.listByBuyer(Long.valueOf(p.get("buyerId")));
+                    else if (p.containsKey("status")) result = orderService.listByStatus(p.get("status"));
+                    else result = orderService.listAll();
+                    break;
+                case "get":      result = orderService.getById(Long.valueOf(p.get("id"))); break;
+                default: throw new com.example.common.BusinessException(404, "未知操作");
+            }
+            sendJson(ex, 200, ok(result));
+        }
+    }
+
+    // ---- 初始化测试数据：注册 2 用户 + 3 商品，方便演示 ----
+    class BizInitHandler extends BizBaseHandler {
+        @Override
+        protected void doHandle(HttpExchange ex, Map<String, String> p) throws Exception {
+            if (userService.listAll().isEmpty()) {
+                com.example.entity.User admin = userService.register("admin", "Admin123", "admin@example.com", "ADMIN");
+                com.example.entity.User seller = userService.register("seller01", "Seller123", "seller@example.com", "SELLER");
+                com.example.entity.User buyer  = userService.register("buyer01", "Buyer123", "buyer@example.com", "BUYER");
+                userService.recharge(buyer.getId(), 1000000); // 充值 10000 元
+
+                productService.create("Apple iPhone 15", 699900, 100, "电子产品", seller.getId());
+                productService.create("Sony WH-1000XM5 耳机", 249900, 200, "电子产品", seller.getId());
+                productService.create("机械键盘 Cherry MX", 89900, 500, "电脑配件", seller.getId());
+                productService.create("优衣库纯棉 T 恤", 9900, 1000, "服装", seller.getId());
+            }
+            java.util.Map<String, Object> info = new java.util.LinkedHashMap<>();
+            info.put("userCount", userService.listAll().size());
+            info.put("productCount", productService.listAll().size());
+            info.put("orderCount", orderService.listAll().size());
+            sendJson(ex, 200, ok(info));
         }
     }
 
@@ -534,6 +698,13 @@ public class WebApplication {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("code", 200);
         m.put("message", msg);
+        return m;
+    }
+
+    private Map<String, Object> ok(Object data) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("code", 200);
+        m.put("data", data);
         return m;
     }
 

@@ -13,32 +13,34 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * 使用方式：
  *   @RegisterExtension
- *   static final WebServerExtension server = new WebServerExtension(8088);
+ *   static final WebServerExtension server = new WebServerExtension(); // 0 = 随机端口，避免冲突
  *
- *   然后在测试中通过 server.getBaseUrl() 获取访问地址。
+ *   然后在测试中通过 server.getBaseUrl() 获取访问地址，或 server.getPort() 拿到实际端口。
  */
 public class WebServerExtension implements BeforeAllCallback, AfterAllCallback {
 
     private static final AtomicInteger REF_COUNT = new AtomicInteger(0);
     private static WebApplication app;
     private static String baseUrl;
+    private static int actualPort;
 
-    private final int port;
+    private final int requestedPort;
 
     public WebServerExtension() {
-        this(8088);
+        this(0); // 默认 0 = 动态分配随机空闲端口
     }
 
     public WebServerExtension(int port) {
-        this.port = port;
+        this.requestedPort = port;
     }
 
     @Override
     public synchronized void beforeAll(ExtensionContext context) throws Exception {
         if (REF_COUNT.getAndIncrement() == 0) {
             app = new WebApplication();
-            app.start(port);
-            baseUrl = "http://localhost:" + port;
+            int bound = app.start(requestedPort);
+            actualPort = (bound > 0) ? bound : requestedPort;
+            baseUrl = "http://localhost:" + actualPort;
             // 等待服务就绪
             Thread.sleep(300);
             System.out.println("[WebServerExtension] 服务已启动: " + baseUrl);
@@ -56,5 +58,9 @@ public class WebServerExtension implements BeforeAllCallback, AfterAllCallback {
 
     public String getBaseUrl() {
         return baseUrl;
+    }
+
+    public int getPort() {
+        return actualPort;
     }
 }

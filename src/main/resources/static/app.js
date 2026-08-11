@@ -25,6 +25,12 @@ function showResult(el, data, isOkFn) {
     el.textContent = JSON.stringify(data, null, 2);
 }
 
+// 金额：分 -> 元
+function fen2yuan(fen) {
+    if (fen == null) return '-';
+    return (fen / 100).toFixed(2);
+}
+
 // ====== 计算器 ======
 const $calcA = document.getElementById('calc-a');
 const $calcB = document.getElementById('calc-b');
@@ -100,6 +106,207 @@ document.getElementById('perm-run').addEventListener('click', async () => {
     showResult(document.getElementById('perm-result'), data);
 });
 
+// ============================================================
+// ====== 电商业务：用户管理 / 商品管理 / 订单交易 ============
+// ============================================================
+
+// 通用：表格渲染
+function renderTable(tbodySelector, rows, columns) {
+    const tbody = document.querySelector(tbodySelector);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${columns.length}" style="text-align:center;color:#999;padding:24px;">暂无数据，点击「初始化演示数据」或添加记录</td></tr>`;
+        return;
+    }
+    rows.forEach(row => {
+        const tr = document.createElement('tr');
+        columns.forEach(col => {
+            const td = document.createElement('td');
+            td.innerHTML = typeof col.render === 'function' ? col.render(row) : (row[col.key] ?? '-');
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+}
+
+// ---- 初始化演示数据 ----
+document.getElementById('biz-init').addEventListener('click', async () => {
+    const data = await api('/biz/init');
+    showResult(document.getElementById('bizuser-register-result'), data);
+    if (data.code === 200) {
+        await Promise.all([loadUserList(), loadProductList(), loadOrderList()]);
+    }
+});
+
+// ---- 用户管理 ----
+async function loadUserList() {
+    const data = await api('/biz/user/list');
+    const list = (data && data.code === 200 && data.data) ? data.data : [];
+    document.getElementById('bizuser-count').textContent = `用户数: ${list.length}`;
+    // 把第一个卖家ID填入商品上架表单
+    const seller = list.find(u => u.role === 'SELLER');
+    if (seller && !document.getElementById('bizprod-seller').value) {
+        document.getElementById('bizprod-seller').value = seller.id;
+    }
+    // 把第一个买家ID填入订单表单
+    const buyer = list.find(u => u.role === 'BUYER');
+    if (buyer && !document.getElementById('bizorder-buyer').value) {
+        document.getElementById('bizorder-buyer').value = buyer.id;
+    }
+    if (!document.getElementById('bizuser-recharge-id').value && buyer) {
+        document.getElementById('bizuser-recharge-id').value = buyer.id;
+    }
+    renderTable('#bizuser-table tbody', list, [
+        { key: 'id' },
+        { key: 'username' },
+        { key: 'email' },
+        { render: r => `<span class="status-tag role-${r.role}">${r.role}</span>` },
+        { render: r => `<b>¥${fen2yuan(r.balance)}</b>` },
+        { key: 'createdAt' }
+    ]);
+    return list;
+}
+document.getElementById('bizuser-refresh').addEventListener('click', loadUserList);
+
+document.getElementById('bizuser-register').addEventListener('click', async () => {
+    const qs = new URLSearchParams({
+        username: document.getElementById('bizuser-username').value,
+        password: document.getElementById('bizuser-password').value,
+        email: document.getElementById('bizuser-email').value,
+        role: document.getElementById('bizuser-role').value
+    }).toString();
+    const data = await api(`/biz/user/register?${qs}`, { method: 'POST' });
+    showResult(document.getElementById('bizuser-register-result'), data);
+    if (data.code === 200) await loadUserList();
+});
+
+document.getElementById('bizuser-login').addEventListener('click', async () => {
+    const qs = new URLSearchParams({
+        username: document.getElementById('bizuser-login-u').value,
+        password: document.getElementById('bizuser-login-p').value
+    }).toString();
+    const data = await api(`/biz/user/login?${qs}`, { method: 'POST' });
+    showResult(document.getElementById('bizuser-login-result'), data);
+});
+
+document.getElementById('bizuser-recharge').addEventListener('click', async () => {
+    const id = document.getElementById('bizuser-recharge-id').value;
+    const amount = parseInt(document.getElementById('bizuser-recharge-amount').value || '0', 10);
+    const qs = `userId=${id}&amount=${amount * 100}`; // 元转分
+    const data = await api(`/biz/user/recharge?${qs}`, { method: 'POST' });
+    showResult(document.getElementById('bizuser-recharge-result'), data);
+    if (data.code === 200) await loadUserList();
+});
+
+// ---- 商品管理 ----
+async function loadProductList(category) {
+    const url = category
+        ? `/biz/product/list?category=${encodeURIComponent(category)}`
+        : `/biz/product/list`;
+    const data = await api(url);
+    const list = (data && data.code === 200 && data.data) ? data.data : [];
+    document.getElementById('bizprod-count').textContent = `商品数: ${list.length}`;
+    // 把第一个商品ID填入订单表单
+    if (list.length && !document.getElementById('bizorder-product').value) {
+        document.getElementById('bizorder-product').value = list[0].id;
+    }
+    renderTable('#bizprod-table tbody', list, [
+        { key: 'id' },
+        { key: 'name' },
+        { key: 'category' },
+        { render: r => `<b>¥${fen2yuan(r.price)}</b>` },
+        { render: r => {
+            const s = r.stock || 0;
+            const cls = s === 0 ? 'color:#dc2626;font-weight:700' : (s < 10 ? 'color:#d97706;font-weight:700' : '');
+            return `<span style="${cls}">${s}</span>`;
+        }},
+        { key: 'sellerId' },
+        { render: r => `<span class="status-tag status-${r.status}">${r.status}</span>` }
+    ]);
+    return list;
+}
+document.getElementById('bizprod-refresh').addEventListener('click', () => loadProductList());
+document.getElementById('bizprod-filter-btn').addEventListener('click', () => {
+    loadProductList(document.getElementById('bizprod-category-filter').value);
+});
+
+document.getElementById('bizprod-create').addEventListener('click', async () => {
+    const name = document.getElementById('bizprod-name').value;
+    const price = parseInt(document.getElementById('bizprod-price').value || '0', 10) * 100;
+    const stock = parseInt(document.getElementById('bizprod-stock').value || '0', 10);
+    const category = document.getElementById('bizprod-category').value;
+    const sellerId = document.getElementById('bizprod-seller').value;
+    const qs = new URLSearchParams({ name, price, stock, category, sellerId }).toString();
+    const data = await api(`/biz/product/create?${qs}`, { method: 'POST' });
+    showResult(document.getElementById('bizprod-create-result'), data);
+    if (data.code === 200) await loadProductList();
+});
+
+// ---- 订单交易 ----
+async function loadOrderList(status) {
+    const url = status
+        ? `/biz/order/list?status=${encodeURIComponent(status)}`
+        : `/biz/order/list`;
+    const data = await api(url);
+    const list = (data && data.code === 200 && data.data) ? data.data : [];
+    const totalAmount = list.reduce((s, o) => s + (o.status === 'COMPLETED' ? (o.totalAmount || 0) : 0), 0);
+    document.getElementById('bizorder-count').textContent = `订单数: ${list.length}`;
+    document.getElementById('bizorder-amount').textContent = `总成交额: ¥${fen2yuan(totalAmount)}`;
+    renderTable('#bizorder-table tbody', list, [
+        { key: 'id' },
+        { key: 'buyerId' },
+        { key: 'productId' },
+        { key: 'quantity' },
+        { render: r => `<b>¥${fen2yuan(r.totalAmount)}</b>` },
+        { render: r => `<span class="status-tag status-${r.status}">${r.status}</span>` },
+        { key: 'address' },
+        { key: 'createdAt' }
+    ]);
+    return list;
+}
+document.getElementById('bizorder-refresh').addEventListener('click', () => loadOrderList());
+document.getElementById('bizorder-filter-btn').addEventListener('click', () => {
+    loadOrderList(document.getElementById('bizorder-status-filter').value);
+});
+
+document.getElementById('bizorder-create').addEventListener('click', async () => {
+    const qs = new URLSearchParams({
+        buyerId: document.getElementById('bizorder-buyer').value,
+        productId: document.getElementById('bizorder-product').value,
+        quantity: document.getElementById('bizorder-quantity').value,
+        address: document.getElementById('bizorder-address').value
+    }).toString();
+    const data = await api(`/biz/order/create?${qs}`, { method: 'POST' });
+    showResult(document.getElementById('bizorder-create-result'), data);
+    if (data.code === 200) {
+        await Promise.all([loadOrderList(), loadUserList(), loadProductList()]);
+    }
+});
+
+document.querySelectorAll('[data-orderaction]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const action = btn.dataset.orderaction;
+        const orderId = document.getElementById('bizorder-action-id').value;
+        const opId = document.getElementById('bizorder-action-opid').value;
+        let qs;
+        if (action === 'ship') qs = `orderId=${orderId}&sellerId=${opId}`;
+        else if (action === 'complete') qs = `orderId=${orderId}&buyerId=${opId}`;
+        else qs = `orderId=${orderId}&operatorId=${opId}`;
+        const data = await api(`/biz/order/${action}?${qs}`, { method: 'POST' });
+        showResult(document.getElementById('bizorder-action-result'), data);
+        if (data.code === 200) await loadOrderList();
+    });
+});
+
+// 页面加载时自动尝试初始化并加载列表（不阻塞）
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await api('/biz/init');
+        await Promise.all([loadUserList(), loadProductList(), loadOrderList()]);
+    } catch (e) { /* ignore */ }
+});
+
 // ====== 运行测试 ======
 const $summary = document.getElementById('test-summary');
 const $failures = document.getElementById('test-failures');
@@ -127,6 +334,8 @@ document.querySelectorAll('.test-btn').forEach(btn => {
             all: '全部测试', calculator: '计算器单元测试', string: '字符串单元测试',
             user: '用户校验单元测试', api: 'HTTP 接口测试',
             restassured: 'RestAssured API 自动化测试',
+            biz: '电商业务 Service 单元测试',
+            bizapi: '电商业务 RestAssured API 集成测试',
             ui: 'Playwright UI 自动化测试',
             suite: '自动化测试套件'
         };
