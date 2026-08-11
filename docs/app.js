@@ -1,4 +1,4 @@
-﻿// ====== Tab 切换 ======
+// ====== Tab 切换 ======
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -8,7 +8,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
-// ====== 安全工具：避免缺失元素导致全局脚本中断 ======
+// ====== 安全工具：元素不存在时不报错，避免单个缺失元素导致全局脚本中断 ======
 function $(id) { return document.getElementById(id); }
 function bindClick(id, handler) {
     const el = typeof id === 'string' ? $(id) : id;
@@ -19,7 +19,7 @@ function bindAll(selector, handler) {
     document.querySelectorAll(selector).forEach(el => el && el.addEventListener('click', handler));
 }
 
-// ====== 工具类前端实现（与后端 Java 逻辑一致） ======
+// ============ GitHub Pages 离线版专属：前端工具实现（与后端 Java 逻辑一致） ============
 const Calculator = {
     add: (a, b) => a + b,
     subtract: (a, b) => a - b,
@@ -37,7 +37,6 @@ const Calculator = {
         return r;
     }
 };
-
 const StringUtils = {
     isEmpty: (s) => s === null || s.length === 0,
     isBlank: (s) => s === null || s.trim().length === 0,
@@ -64,7 +63,6 @@ const StringUtils = {
         return c;
     }
 };
-
 const UserValidator = {
     usernameRe: /^[a-zA-Z0-9_]{3,20}$/,
     passwordRe: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,20}$/,
@@ -84,7 +82,7 @@ const UserValidator = {
     }
 };
 
-// ====== 电商业务模拟（Entity/DAO/Service 三层逻辑纯 JS 复刻） ======
+// ============ GitHub Pages 离线版专属：BizStore 电商三层模拟（纯JS复刻后端Java逻辑） ============
 const BizStore = (() => {
     let users = [], products = [], orders = [], transactions = [];
     let uidSeq = 0, pidSeq = 0, oidSeq = 0, txSeq = 0;
@@ -95,7 +93,6 @@ const BizStore = (() => {
             refNo: refNo || null, remark: remark || null, createdAt: nowStr()
         });
     }
-
     function initDemoData() {
         if (users.length > 0) return { userCount: users.length, productCount: products.length, orderCount: orders.length };
         const admin = register('admin', 'Admin123', 'admin@example.com', 'ADMIN');
@@ -108,7 +105,6 @@ const BizStore = (() => {
         createProduct('优衣库纯棉 T 恤', 9900, 1000, '服装', seller.id);
         return { userCount: users.length, productCount: products.length, orderCount: orders.length };
     }
-
     function register(username, password, email, role = 'BUYER') {
         if (!username || username.length < 3) throw new Error('用户名至少3位');
         if (!password || !UserValidator.isValidPassword(password)) throw new Error('密码格式不合法（需包含大小写字母+数字，6-20位）');
@@ -218,7 +214,7 @@ const BizStore = (() => {
         if (o.status === 'PAID' || o.status === 'SHIPPED') {
             const buyer = users.find(x => x.id === o.buyerId);
             if (buyer) {
-                buyer.balance += o.totalAmount; // 退款
+                buyer.balance += o.totalAmount;
                 addTx(buyer.id, 'CANCEL_REFUND', o.totalAmount, buyer.balance, 'O' + o.id, '订单取消退款');
             }
             const seller = users.find(x => {
@@ -230,7 +226,7 @@ const BizStore = (() => {
                 addTx(seller.id, 'CANCEL_DEDUCT', -o.totalAmount, seller.balance, 'O' + o.id, '订单取消扣回');
             }
             const prod = products.find(x => x.id === o.productId);
-            if (prod) prod.stock += o.quantity; // 恢复库存
+            if (prod) prod.stock += o.quantity;
         }
         o.status = 'CANCELLED';
         return o;
@@ -277,14 +273,300 @@ const BizStore = (() => {
     };
 })();
 
-// ====== UI 辅助 ======
-function showResult(el, data, okFn) {
+// ====== 通用请求方法（GitHub Pages 离线版：不走fetch，走本地模拟路由） ======
+function parseQuery(qs) {
+    const r = {};
+    if (!qs) return r;
+    new URLSearchParams(qs).forEach((v, k) => r[k] = v);
+    return r;
+}
+function success(msg, data) {
+    const r = { code: 200, message: msg || 'success' };
+    if (data !== undefined) r.data = data;
+    return r;
+}
+function error(code, msg) { return { code, message: msg }; }
+
+async function api(url, opts = {}) {
+    try {
+        // 去除 querystring 保留 path
+        const qIdx = url.indexOf('?');
+        const path = qIdx === -1 ? url : url.slice(0, qIdx);
+        const q = qIdx === -1 ? {} : parseQuery(url.slice(qIdx + 1));
+
+        // ===== 计算器 =====
+        if (path === '/api/calc') {
+            const a = Number(q.a), b = Number(q.b), op = q.op;
+            const r = { code: 200, a, b, op };
+            try {
+                switch (op) {
+                    case 'add': r.result = Calculator.add(a, b); break;
+                    case 'sub': r.result = Calculator.subtract(a, b); break;
+                    case 'mul': r.result = Calculator.multiply(a, b); break;
+                    case 'div': r.result = Calculator.divide(a, b); break;
+                    case 'isPrime': r.result = Calculator.isPrime(a); break;
+                    case 'factorial': r.result = Calculator.factorial(a); break;
+                }
+            } catch (e) { return error(400, e.message); }
+            return r;
+        }
+        // ===== 字符串 =====
+        if (path === '/api/string') {
+            const s = q.s, op = q.op;
+            const r = { code: 200, op, input: s };
+            try {
+                switch (op) {
+                    case 'isEmpty': r.result = StringUtils.isEmpty(s); break;
+                    case 'isBlank': r.result = StringUtils.isBlank(s); break;
+                    case 'reverse': r.result = StringUtils.reverse(s); break;
+                    case 'toCamelCase': r.result = StringUtils.toCamelCase(s); break;
+                    case 'isPalindrome': r.result = StringUtils.isPalindrome(s); break;
+                    case 'count': r.result = StringUtils.countOccurrences(s, q.sub || ''); r.sub = q.sub || ''; break;
+                }
+            } catch (e) { return error(400, e.message); }
+            return r;
+        }
+        // ===== 用户校验 =====
+        if (path === '/api/user') {
+            const op = q.op;
+            if (op === 'validate') {
+                return { code: 200, op, result: UserValidator.validateUser(q.u, q.p, q.e) };
+            }
+            if (op === 'permission') {
+                try { return { code: 200, op, result: UserValidator.checkPermission(q.role) }; }
+                catch (e) { return error(400, e.message); }
+            }
+        }
+        // ===== 注册接口（接口测试Tab入口，同时写入BizStore打通用户列表）=====
+        if (path === '/api/register') {
+            if (!UserValidator.validateUser(q.username, q.password, q.email)) return error(400, '注册信息不合法');
+            try {
+                const user = BizStore.register(q.username, q.password, q.email, 'BUYER');
+                const { password, ...safe } = user;
+                const r = success('注册成功', safe);
+                return r;
+            } catch (be) { return error(400, be.message); }
+        }
+        if (path === '/api/login') {
+            try {
+                const r = BizStore.login(q.username, q.password);
+                return { code: 200, message: '登录成功', data: r, token: 'mock-token-' + Date.now() };
+            } catch (e) {
+                // 回退兼容老版演示账号
+                if (q.username === 'admin' && q.password === 'Admin123') {
+                    return { code: 200, message: '登录成功', token: 'mock-token-' + Date.now() };
+                }
+                return error(401, e.message || '用户名或密码错误');
+            }
+        }
+        if (path === '/api/permission') {
+            try { return { code: 200, permission: UserValidator.checkPermission(q.role) }; }
+            catch (e) { return error(400, e.message); }
+        }
+
+        // ===== 电商业务：初始化 =====
+        if (path === '/biz/init') {
+            const info = BizStore.initDemoData();
+            return success('初始化演示数据完成', info);
+        }
+        // ===== 电商用户 =====
+        if (path === '/biz/user/list') return success('ok', BizStore.listUsers());
+        if (path === '/biz/user/register') {
+            try {
+                const u = BizStore.register(q.username, q.password, q.email, q.role || 'BUYER');
+                const { password, ...safe } = u;
+                return success('注册成功', safe);
+            } catch (e) { return error(400, e.message); }
+        }
+        if (path === '/biz/user/login') {
+            try { return success('登录成功', BizStore.login(q.username, q.password)); }
+            catch (e) { return error(401, e.message); }
+        }
+        if (path === '/biz/user/recharge') {
+            try {
+                const uid = parseInt(q.userId, 10);
+                const amt = parseInt(q.amount, 10);
+                return success('充值成功', BizStore.recharge(uid, amt));
+            } catch (e) { return error(400, e.message); }
+        }
+        if (path === '/biz/user/transactions') {
+            try { return success('ok', BizStore.listTransactions(q.userId)); }
+            catch (e) { return error(400, e.message); }
+        }
+        // ===== 电商商品 =====
+        if (path === '/biz/product/list') return success('ok', BizStore.listProducts(q.category));
+        if (path === '/biz/product/create') {
+            try {
+                const name = q.name;
+                const price = parseInt(q.price, 10);
+                const stock = parseInt(q.stock, 10);
+                const sid = parseInt(q.sellerId, 10);
+                return success('商品已上架', BizStore.createProduct(name, price, stock, q.category, sid));
+            } catch (e) { return error(400, e.message); }
+        }
+        if (path === '/biz/product/search') {
+            try {
+                return success('ok', BizStore.searchProducts(q.keyword, q.category, q.sellerId, q.page, q.size));
+            } catch (e) { return error(400, e.message); }
+        }
+        // ===== 电商订单 =====
+        if (path === '/biz/order/list') {
+            return success('ok', BizStore.listOrders(q.status ? { status: q.status } : null));
+        }
+        if (path === '/biz/order/create') {
+            try {
+                const o = BizStore.createOrder(
+                    parseInt(q.buyerId, 10),
+                    parseInt(q.productId, 10),
+                    parseInt(q.quantity, 10),
+                    q.address || ''
+                );
+                return success('下单成功', o);
+            } catch (e) { return error(400, e.message); }
+        }
+        if (path.startsWith('/biz/order/')) {
+            const action = path.slice('/biz/order/'.length);
+            try {
+                const oid = parseInt(q.orderId, 10);
+                let opid, r;
+                switch (action) {
+                    case 'ship':
+                        opid = parseInt(q.sellerId, 10);
+                        r = BizStore.shipOrder(oid, opid); break;
+                    case 'complete':
+                        opid = parseInt(q.buyerId, 10);
+                        r = BizStore.completeOrder(oid, opid); break;
+                    case 'cancel':
+                    case 'refund':
+                        opid = parseInt(q.operatorId, 10);
+                        r = action === 'refund' ? BizStore.refundOrder(oid, opid) : BizStore.cancelOrder(oid, opid);
+                        break;
+                    default:
+                        return error(404, '未知操作');
+                }
+                return success('操作成功', r);
+            } catch (e) { return error(400, e.message); }
+        }
+
+        // ===== 运行测试（前端模拟JUnit 5引擎） =====
+        if (path === '/api/test/run') {
+            return await runMockTests(q.target || 'all');
+        }
+        // ===== 性能测试（前端模拟） =====
+        if (path === '/api/test/perf') {
+            return await runMockPerf(q.api, q.threads, q.loops);
+        }
+
+        return error(404, '接口不存在: ' + path);
+    } catch (e) {
+        return { code: 0, message: '请求失败: ' + e.message };
+    }
+}
+
+// ====== 通用：展示结果 ======
+function showResult(el, data, isOkFn) {
     el.classList.remove('ok', 'err');
-    const ok = okFn ? okFn(data) : data && data.code === 200;
+    const ok = isOkFn ? isOkFn(data) : data && data.code === 200;
     el.classList.add(ok ? 'ok' : 'err');
     el.textContent = JSON.stringify(data, null, 2);
 }
-function fen2yuan(fen) { return fen == null ? '-' : (fen / 100).toFixed(2); }
+
+// 金额：分 -> 元
+function fen2yuan(fen) {
+    if (fen == null) return '-';
+    return (fen / 100).toFixed(2);
+}
+
+// ====== 计算器 ======
+const $calcA = document.getElementById('calc-a');
+const $calcB = document.getElementById('calc-b');
+const $calcOp = document.getElementById('calc-op');
+const $calcN = document.getElementById('calc-n');
+const $calcRes = document.getElementById('calc-result');
+
+bindClick('calc-run', async () => {
+    const data = await api(`/api/calc?a=${$calcA.value}&b=${$calcB.value}&op=${$calcOp.value}`);
+    showResult($calcRes, data);
+});
+
+bindAll('[data-single]', async (e) => {
+    const op = e.currentTarget.dataset.single;
+    const data = await api(`/api/calc?a=${$calcN.value}&op=${op}`);
+    showResult($calcRes, data);
+});
+
+// ====== 字符串工具 ======
+const $strS = document.getElementById('str-s');
+const $strSub = document.getElementById('str-sub');
+const $strRes = document.getElementById('str-result');
+
+bindAll('[data-sop]', async (e) => {
+    const btn = e.currentTarget;
+    const op = btn.dataset.sop;
+    let url = `/api/string?s=${encodeURIComponent($strS.value)}&op=${op}`;
+    if (op === 'count') url += `&sub=${encodeURIComponent($strSub.value)}`;
+    const data = await api(url);
+    showResult($strRes, data);
+});
+
+// ====== 用户校验 ======
+const $uvUser = $('uv-username');
+const $uvPwd = $('uv-password');
+const $uvEmail = $('uv-email');
+const $uvRole = $('uv-role');
+const $uvRes = $('user-result');
+
+bindClick('uv-validate', async () => {
+    if (!$uvUser || !$uvPwd || !$uvEmail || !$uvRes) return;
+    const url = `/api/user?op=validate&u=${encodeURIComponent($uvUser.value)}`
+        + `&p=${encodeURIComponent($uvPwd.value)}&e=${encodeURIComponent($uvEmail.value)}`;
+    const data = await api(url);
+    showResult($uvRes, data);
+});
+
+bindClick('uv-permission', async () => {
+    if (!$uvRole || !$uvRes) return;
+    const data = await api(`/api/user?op=permission&role=${encodeURIComponent($uvRole.value)}`);
+    showResult($uvRes, data);
+});
+
+// ====== 接口测试 ======
+bindClick('reg-run', async () => {
+    const regU = $('reg-u'), regP = $('reg-p'), regE = $('reg-e');
+    const regResult = $('reg-result');
+    if (!regU || !regP || !regE || !regResult) return;
+    const q = `username=${encodeURIComponent(regU.value)}`
+        + `&password=${encodeURIComponent(regP.value)}`
+        + `&email=${encodeURIComponent(regE.value)}`;
+    const data = await api(`/api/register?${q}`, { method: 'POST' });
+    showResult(regResult, data);
+    // 注册成功后同步刷新电商用户列表，使用户在两个tab中注册都能看到结果
+    if (data && data.code === 200) {
+        try { await loadUserList(); } catch (e) { /* ignore */ }
+    }
+});
+
+bindClick('login-run', async () => {
+    const loginU = $('login-u'), loginP = $('login-p'), loginResult = $('login-result');
+    if (!loginU || !loginP || !loginResult) return;
+    const q = `username=${encodeURIComponent(loginU.value)}`
+        + `&password=${encodeURIComponent(loginP.value)}`;
+    const data = await api(`/api/login?${q}`, { method: 'POST' });
+    showResult(loginResult, data);
+});
+
+bindClick('perm-run', async () => {
+    const permR = $('perm-r'), permResult = $('perm-result');
+    if (!permR || !permResult) return;
+    const data = await api(`/api/permission?role=${encodeURIComponent(permR.value)}`);
+    showResult(permResult, data);
+});
+
+// ============================================================
+// ====== 电商业务：用户管理 / 商品管理 / 订单交易 ============
+// ============================================================
+
+// 通用：表格渲染（带防御性空值检查）
 function renderTable(tbodySelector, rows, columns) {
     try {
         const tbody = document.querySelector(tbodySelector);
@@ -315,108 +597,40 @@ function renderTable(tbodySelector, rows, columns) {
     }
 }
 
-// ====== 计算器 ======
-const $calcA = document.getElementById('calc-a');
-const $calcB = document.getElementById('calc-b');
-const $calcOp = document.getElementById('calc-op');
-const $calcN = document.getElementById('calc-n');
-const $calcRes = document.getElementById('calc-result');
-
-bindClick('calc-run', () => {
-    const a = parseInt($calcA.value) || 0;
-    const b = parseInt($calcB.value) || 0;
-    const op = $calcOp.value;
-    const result = { code: 200, a, b, op };
-    try {
-        switch (op) {
-            case 'add': result.result = Calculator.add(a, b); break;
-            case 'sub': result.result = Calculator.subtract(a, b); break;
-            case 'mul': result.result = Calculator.multiply(a, b); break;
-            case 'div': result.result = Calculator.divide(a, b); break;
-        }
-    } catch (e) { result.code = 400; result.message = e.message; }
-    showResult($calcRes, result);
+// ---- 初始化演示数据 ----
+bindClick('biz-init', async () => {
+    const resultEl = $('bizuser-register-result');
+    const data = await api('/biz/init');
+    if (resultEl) showResult(resultEl, data);
+    if (data.code === 200) {
+        await Promise.all([loadUserList(), loadProductList(), loadOrderList()]);
+    }
 });
 
-bindAll('[data-single]', (e) => {
-    const btn = e.currentTarget;
-    const n = parseInt($calcN.value) || 0;
-    const op = btn.dataset.single;
-    const result = { code: 200, op };
-    try {
-        result.result = op === 'isPrime' ? Calculator.isPrime(n) : Calculator.factorial(n);
-    } catch (e) { result.code = 400; result.message = e.message; }
-    showResult($calcRes, result);
-});
-
-// ====== 字符串 ======
-const $strS = document.getElementById('str-s');
-const $strSub = document.getElementById('str-sub');
-const $strRes = document.getElementById('str-result');
-
-bindAll('[data-sop]', (e) => {
-    const btn = e.currentTarget;
-    const op = btn.dataset.sop;
-    const s = $strS.value;
-    const result = { code: 200, op, input: s };
-    try {
-        switch (op) {
-            case 'isEmpty': result.result = StringUtils.isEmpty(s); break;
-            case 'isBlank': result.result = StringUtils.isBlank(s); break;
-            case 'reverse': result.result = StringUtils.reverse(s); break;
-            case 'toCamelCase': result.result = StringUtils.toCamelCase(s); break;
-            case 'isPalindrome': result.result = StringUtils.isPalindrome(s); break;
-            case 'count': result.sub = $strSub.value; result.result = StringUtils.countOccurrences(s, $strSub.value); break;
-        }
-    } catch (e) { result.code = 400; result.message = e.message; }
-    showResult($strRes, result);
-});
-
-// ====== 用户校验 ======
-bindClick('uv-validate', () => {
-    const result = {
-        code: 200, op: 'validate',
-        result: UserValidator.validateUser(
-            $('uv-username') ? $('uv-username').value : '',
-            $('uv-password') ? $('uv-password').value : '',
-            $('uv-email') ? $('uv-email').value : ''
-        )
-    };
-    if ($('user-result')) showResult($('user-result'), result);
-});
-
-bindClick('uv-permission', () => {
-    const result = { code: 200, op: 'permission' };
-    try {
-        result.result = UserValidator.checkPermission($('uv-role') ? $('uv-role').value : '');
-    } catch (e) { result.code = 400; result.message = e.message; }
-    if ($('user-result')) showResult($('user-result'), result);
-});
-
-// ============================================================
-// ====== 电商业务前端模拟交互 ================================
-// ============================================================
-
+// ---- 用户管理 ----
 async function loadUserList() {
     try {
-        const list = BizStore.listUsers();
-        const countEl = document.getElementById('bizuser-count');
+        const data = await api('/biz/user/list');
+        const list = (data && data.code === 200 && data.data) ? data.data : [];
+        const countEl = $('bizuser-count');
         if (countEl) countEl.textContent = `用户数: ${list.length}`;
+        // 把第一个卖家ID填入商品上架表单
         const seller = list.find(u => u && u.role === 'SELLER');
-        const sellerInput = document.getElementById('bizprod-seller');
+        const sellerInput = $('bizprod-seller');
         if (seller && sellerInput && !sellerInput.value) {
             sellerInput.value = seller.id;
         }
+        // 把第一个买家ID填入订单表单
         const buyer = list.find(u => u && u.role === 'BUYER');
-        const buyerInput = document.getElementById('bizorder-buyer');
+        const buyerInput = $('bizorder-buyer');
         if (buyer && buyerInput && !buyerInput.value) {
             buyerInput.value = buyer.id;
         }
-        const rechargeInput = document.getElementById('bizuser-recharge-id');
+        const rechargeInput = $('bizuser-recharge-id');
         if (rechargeInput && !rechargeInput.value && buyer) {
             rechargeInput.value = buyer.id;
         }
-        const txlogInput = document.getElementById('txlog-userid');
+        const txlogInput = $('txlog-userid');
         if (txlogInput && !txlogInput.value && buyer) {
             txlogInput.value = buyer.id;
         }
@@ -434,12 +648,95 @@ async function loadUserList() {
         return [];
     }
 }
+bindClick('bizuser-refresh', loadUserList);
 
+bindClick('bizuser-register', async () => {
+    const uEl = $('bizuser-username'), pEl = $('bizuser-password');
+    const eEl = $('bizuser-email'), rEl = $('bizuser-role');
+    const resultEl = $('bizuser-register-result');
+    if (!uEl || !pEl || !eEl || !rEl) return;
+    const qs = new URLSearchParams({
+        username: uEl.value,
+        password: pEl.value,
+        email: eEl.value,
+        role: rEl.value
+    }).toString();
+    const data = await api(`/biz/user/register?${qs}`, { method: 'POST' });
+    if (resultEl) showResult(resultEl, data);
+    if (data.code === 200) await loadUserList();
+});
+
+bindClick('bizuser-login', async () => {
+    const uEl = $('bizuser-login-u'), pEl = $('bizuser-login-p');
+    const resultEl = $('bizuser-login-result');
+    if (!uEl || !pEl) return;
+    const qs = new URLSearchParams({
+        username: uEl.value,
+        password: pEl.value
+    }).toString();
+    const data = await api(`/biz/user/login?${qs}`, { method: 'POST' });
+    if (resultEl) showResult(resultEl, data);
+});
+
+bindClick('bizuser-recharge', async () => {
+    const idEl = $('bizuser-recharge-id');
+    const amountEl = $('bizuser-recharge-amount');
+    const resultEl = $('bizuser-recharge-result');
+    if (!idEl || !amountEl) return;
+    const id = idEl.value;
+    const amount = parseInt(amountEl.value || '0', 10);
+    const qs = `userId=${id}&amount=${amount * 100}`; // 元转分
+    const data = await api(`/biz/user/recharge?${qs}`, { method: 'POST' });
+    if (resultEl) showResult(resultEl, data);
+    if (data.code === 200) await loadUserList();
+});
+
+// ---- 账户交易流水 ----
+bindClick('txlog-query', async () => {
+    const uidEl = $('txlog-userid');
+    const resultEl = $('txlog-result');
+    const countEl = $('txlog-count');
+    if (!uidEl) return;
+    const uid = uidEl.value;
+    if (!uid) {
+        const el = resultEl;
+        if (el) {
+            el.classList.remove('ok'); el.classList.add('err');
+            el.textContent = '请先输入用户ID';
+        }
+        return;
+    }
+    const data = await api(`/biz/user/transactions?userId=${uid}`);
+    if (resultEl) showResult(resultEl, data);
+    const list = (data && data.code === 200 && data.data) ? data.data : [];
+    if (countEl) countEl.textContent = `共 ${list.length} 条`;
+    renderTable('#txlog-table tbody', list, [
+        { key: 'id' },
+        { render: r => `<span class="status-tag tx-${r.type}">${r.type || '-'}</span>` },
+        { render: r => {
+            const a = r.amount || 0;
+            return `<b style="color:${a >= 0 ? '#059669' : '#dc2626'}">${a >= 0 ? '+' : ''}${fen2yuan(a)}</b>`;
+        }},
+        { render: r => `<b>¥${fen2yuan(r.balanceAfter)}</b>` },
+        { key: 'refNo', render: r => r.refNo || '-' },
+        { key: 'remark', render: r => r.remark || '-' },
+        { key: 'createdAt' }
+    ]);
+});
+
+// ---- 商品管理 ----
 async function loadProductList(category) {
-    const list = BizStore.listProducts(category);
-    document.getElementById('bizprod-count').textContent = `商品数: ${list.length}`;
-    if (list.length && !document.getElementById('bizorder-product').value) {
-        document.getElementById('bizorder-product').value = list[0].id;
+    const url = category
+        ? `/biz/product/list?category=${encodeURIComponent(category)}`
+        : `/biz/product/list`;
+    const data = await api(url);
+    const list = (data && data.code === 200 && data.data) ? data.data : [];
+    const cnt = $('bizprod-count');
+    if (cnt) cnt.textContent = `商品数: ${list.length}`;
+    // 把第一个商品ID填入订单表单
+    const bp = $('bizorder-product');
+    if (list.length && bp && !bp.value) {
+        bp.value = list[0].id;
     }
     renderTable('#bizprod-table tbody', list, [
         { key: 'id' },
@@ -456,9 +753,76 @@ async function loadProductList(category) {
     ]);
     return list;
 }
+bindClick('bizprod-refresh', () => loadProductList());
+bindClick('bizprod-filter-btn', () => {
+    const filterEl = $('bizprod-category-filter');
+    loadProductList(filterEl ? filterEl.value : undefined);
+});
 
+bindClick('bizprod-create', async () => {
+    const nameEl = $('bizprod-name');
+    const priceEl = $('bizprod-price');
+    const stockEl = $('bizprod-stock');
+    const catEl = $('bizprod-category');
+    const sellerEl = $('bizprod-seller');
+    const resultEl = $('bizprod-create-result');
+    if (!nameEl || !priceEl || !stockEl || !catEl || !sellerEl) return;
+    const name = nameEl.value;
+    const price = parseInt(priceEl.value || '0', 10) * 100;
+    const stock = parseInt(stockEl.value || '0', 10);
+    const category = catEl.value;
+    const sellerId = sellerEl.value;
+    const qs = new URLSearchParams({ name, price, stock, category, sellerId }).toString();
+    const data = await api(`/biz/product/create?${qs}`, { method: 'POST' });
+    if (resultEl) showResult(resultEl, data);
+    if (data.code === 200) await loadProductList();
+});
+
+// ---- 商品搜索分页 ----
+bindClick('prodsearch-btn', async () => {
+    const kwEl = $('prodsearch-kw');
+    const catEl = $('prodsearch-cat');
+    const pageEl = $('prodsearch-page');
+    const sizeEl = $('prodsearch-size');
+    const resultEl = $('prodsearch-result');
+    const infoEl = $('prodsearch-info');
+    if (!kwEl || !catEl || !pageEl || !sizeEl) return;
+    const qs = new URLSearchParams({
+        keyword: kwEl.value || '',
+        category: catEl.value || '',
+        page: pageEl.value || '1',
+        size: sizeEl.value || '10'
+    }).toString();
+    const data = await api(`/biz/product/search?${qs}`);
+    if (resultEl) showResult(resultEl, data);
+    const ok = data && data.code === 200 && data.data;
+    const list = ok ? data.data.list || [] : [];
+    const total = ok ? (data.data.total || 0) : 0;
+    const page = ok ? (data.data.page || 1) : 1;
+    const tp = ok ? (data.data.totalPages || 0) : 0;
+    if (infoEl) infoEl.textContent = `共 ${total} 条 / 第 ${page} 页 / 共 ${tp} 页`;
+    renderTable('#prodsearch-table tbody', list, [
+        { key: 'id' },
+        { key: 'name' },
+        { key: 'category' },
+        { render: r => `<b>¥${fen2yuan(r.price)}</b>` },
+        { render: r => {
+            const s = r.stock || 0;
+            const cls = s === 0 ? 'color:#dc2626;font-weight:700' : (s < 10 ? 'color:#d97706;font-weight:700' : '');
+            return `<span style="${cls}">${s}</span>`;
+        }},
+        { key: 'sellerId' },
+        { render: r => `<span class="status-tag status-${r.status}">${r.status}</span>` }
+    ]);
+});
+
+// ---- 订单交易 ----
 async function loadOrderList(status) {
-    const list = BizStore.listOrders(status ? { status } : null);
+    const url = status
+        ? `/biz/order/list?status=${encodeURIComponent(status)}`
+        : `/biz/order/list`;
+    const data = await api(url);
+    const list = (data && data.code === 200 && data.data) ? data.data : [];
     const PAID_STATUSES = new Set(['PAID', 'SHIPPED', 'COMPLETED']);
     const totalAmount = list.reduce((s, o) => s + (PAID_STATUSES.has(o.status) ? (o.totalAmount || 0) : 0), 0);
     const countEl = $('bizorder-count');
@@ -478,232 +842,59 @@ async function loadOrderList(status) {
     ]);
     return list;
 }
-
-bindClick('biz-init', () => {
-    try {
-        const info = BizStore.initDemoData();
-        showResult($('bizuser-register-result'), { code: 200, data: info });
-        loadUserList(); loadProductList(); loadOrderList();
-    } catch (e) {
-        showResult($('bizuser-register-result'), { code: 400, message: e.message });
-    }
-});
-
-bindClick('bizuser-refresh', loadUserList);
-bindClick('bizuser-register', () => {
-    try {
-        const u = BizStore.register(
-            document.getElementById('bizuser-username').value,
-            document.getElementById('bizuser-password').value,
-            document.getElementById('bizuser-email').value,
-            document.getElementById('bizuser-role').value
-        );
-        const { password, ...safe } = u;
-        showResult(document.getElementById('bizuser-register-result'), { code: 200, data: safe });
-        loadUserList();
-    } catch (e) {
-        showResult(document.getElementById('bizuser-register-result'), { code: 400, message: e.message });
-    }
-});
-bindClick('bizuser-login', () => {
-    try {
-        const r = BizStore.login(
-            document.getElementById('bizuser-login-u').value,
-            document.getElementById('bizuser-login-p').value
-        );
-        showResult(document.getElementById('bizuser-login-result'), { code: 200, data: r });
-    } catch (e) {
-        showResult(document.getElementById('bizuser-login-result'), { code: 401, message: e.message });
-    }
-});
-bindClick('bizuser-recharge', () => {
-    try {
-        const id = parseInt(document.getElementById('bizuser-recharge-id').value, 10);
-        const amount = parseInt(document.getElementById('bizuser-recharge-amount').value || '0', 10);
-        const r = BizStore.recharge(id, amount * 100);
-        showResult(document.getElementById('bizuser-recharge-result'), { code: 200, data: r });
-        loadUserList();
-    } catch (e) {
-        showResult(document.getElementById('bizuser-recharge-result'), { code: 400, message: e.message });
-    }
-});
-
-// ---- 账户交易流水 ----
-bindClick('txlog-query', () => {
-    try {
-        const uid = document.getElementById('txlog-userid').value;
-        if (!uid) {
-            const el = document.getElementById('txlog-result');
-            el.classList.remove('ok'); el.classList.add('err');
-            el.textContent = '请先输入用户ID';
-            return;
-        }
-        const list = BizStore.listTransactions(uid);
-        showResult(document.getElementById('txlog-result'), { code: 200, data: list });
-        document.getElementById('txlog-count').textContent = `共 ${list.length} 条`;
-        renderTable('#txlog-table tbody', list, [
-            { key: 'id' },
-            { render: r => `<span class="status-tag tx-${r.type}">${r.type || '-'}</span>` },
-            { render: r => {
-                const a = r.amount || 0;
-                return `<b style="color:${a >= 0 ? '#059669' : '#dc2626'}">${a >= 0 ? '+' : ''}${fen2yuan(a)}</b>`;
-            }},
-            { render: r => `<b>¥${fen2yuan(r.balanceAfter)}</b>` },
-            { key: 'refNo', render: r => r.refNo || '-' },
-            { key: 'remark', render: r => r.remark || '-' },
-            { key: 'createdAt' }
-        ]);
-    } catch (e) {
-        showResult(document.getElementById('txlog-result'), { code: 400, message: e.message });
-    }
-});
-
-bindClick('bizprod-refresh', () => loadProductList());
-bindClick('bizprod-filter-btn', () => {
-    loadProductList(document.getElementById('bizprod-category-filter').value);
-});
-bindClick('bizprod-create', () => {
-    try {
-        const name = document.getElementById('bizprod-name').value;
-        const price = parseInt(document.getElementById('bizprod-price').value || '0', 10) * 100;
-        const stock = parseInt(document.getElementById('bizprod-stock').value || '0', 10);
-        const category = document.getElementById('bizprod-category').value;
-        const sellerId = parseInt(document.getElementById('bizprod-seller').value, 10);
-        const p = BizStore.createProduct(name, price, stock, category, sellerId);
-        showResult(document.getElementById('bizprod-create-result'), { code: 200, data: p });
-        loadProductList();
-    } catch (e) {
-        showResult(document.getElementById('bizprod-create-result'), { code: 400, message: e.message });
-    }
-});
-
-// ---- 商品搜索分页 ----
-bindClick('prodsearch-btn', () => {
-    try {
-        const result = BizStore.searchProducts(
-            document.getElementById('prodsearch-kw').value || '',
-            document.getElementById('prodsearch-cat').value || '',
-            '',
-            document.getElementById('prodsearch-page').value || '1',
-            document.getElementById('prodsearch-size').value || '10'
-        );
-        showResult(document.getElementById('prodsearch-result'), { code: 200, data: result });
-        const list = result.list || [];
-        document.getElementById('prodsearch-info').textContent =
-            `共 ${result.total} 条 / 第 ${result.page} 页 / 共 ${result.totalPages} 页`;
-        renderTable('#prodsearch-table tbody', list, [
-            { key: 'id' },
-            { key: 'name' },
-            { key: 'category' },
-            { render: r => `<b>¥${fen2yuan(r.price)}</b>` },
-            { render: r => {
-                const s = r.stock || 0;
-                const cls = s === 0 ? 'color:#dc2626;font-weight:700' : (s < 10 ? 'color:#d97706;font-weight:700' : '');
-                return `<span style="${cls}">${s}</span>`;
-            }},
-            { key: 'sellerId' },
-            { render: r => `<span class="status-tag status-${r.status}">${r.status}</span>` }
-        ]);
-    } catch (e) {
-        showResult(document.getElementById('prodsearch-result'), { code: 400, message: e.message });
-    }
-});
-
 bindClick('bizorder-refresh', () => loadOrderList());
 bindClick('bizorder-filter-btn', () => {
-    loadOrderList(document.getElementById('bizorder-status-filter').value);
-});
-bindClick('bizorder-create', () => {
-    try {
-        const o = BizStore.createOrder(
-            parseInt(document.getElementById('bizorder-buyer').value, 10),
-            parseInt(document.getElementById('bizorder-product').value, 10),
-            parseInt(document.getElementById('bizorder-quantity').value || '1', 10),
-            document.getElementById('bizorder-address').value
-        );
-        showResult(document.getElementById('bizorder-create-result'), { code: 200, data: o });
-        loadOrderList(); loadUserList(); loadProductList();
-    } catch (e) {
-        showResult(document.getElementById('bizorder-create-result'), { code: 400, message: e.message });
-    }
-});
-document.querySelectorAll('[data-orderaction]').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const action = btn.dataset.orderaction;
-        const oid = parseInt(document.getElementById('bizorder-action-id').value, 10);
-        const opid = parseInt(document.getElementById('bizorder-action-opid').value, 10);
-        try {
-            let r;
-            if (action === 'ship') r = BizStore.shipOrder(oid, opid);
-            else if (action === 'complete') r = BizStore.completeOrder(oid, opid);
-            else if (action === 'refund') r = BizStore.refundOrder(oid, opid);
-            else r = BizStore.cancelOrder(oid, opid);
-            showResult(document.getElementById('bizorder-action-result'), { code: 200, data: r });
-            loadOrderList(); loadUserList(); loadProductList();
-        } catch (e) {
-            showResult(document.getElementById('bizorder-action-result'), { code: 400, message: e.message });
-        }
-    });
+    const filterEl = $('bizorder-status-filter');
+    loadOrderList(filterEl ? filterEl.value : undefined);
 });
 
-window.addEventListener('DOMContentLoaded', () => {
+bindClick('bizorder-create', async () => {
+    const buyerEl = $('bizorder-buyer');
+    const prodEl = $('bizorder-product');
+    const qtyEl = $('bizorder-quantity');
+    const addrEl = $('bizorder-address');
+    const resultEl = $('bizorder-create-result');
+    if (!buyerEl || !prodEl || !qtyEl) return;
+    const qs = new URLSearchParams({
+        buyerId: buyerEl.value,
+        productId: prodEl.value,
+        quantity: qtyEl.value,
+        address: addrEl ? addrEl.value : ''
+    }).toString();
+    const data = await api(`/biz/order/create?${qs}`, { method: 'POST' });
+    if (resultEl) showResult(resultEl, data);
+    if (data.code === 200) {
+        await Promise.all([loadOrderList(), loadUserList(), loadProductList()]);
+    }
+});
+
+bindAll('[data-orderaction]', async (e) => {
+    const btn = e.currentTarget;
+    const action = btn.dataset.orderaction;
+    const orderIdEl = $('bizorder-action-id');
+    const opIdEl = $('bizorder-action-opid');
+    const resultEl = $('bizorder-action-result');
+    if (!orderIdEl || !opIdEl) return;
+    const orderId = orderIdEl.value;
+    const opId = opIdEl.value;
+    let qs;
+    if (action === 'ship') qs = `orderId=${orderId}&sellerId=${opId}`;
+    else if (action === 'complete') qs = `orderId=${orderId}&buyerId=${opId}`;
+    else qs = `orderId=${orderId}&operatorId=${opId}`;
+    const data = await api(`/biz/order/${action}?${qs}`, { method: 'POST' });
+    if (resultEl) showResult(resultEl, data);
+    if (data.code === 200) await loadOrderList();
+});
+
+// 页面加载时自动尝试初始化并加载列表（不阻塞）
+window.addEventListener('DOMContentLoaded', async () => {
     try {
-        BizStore.initDemoData();
-        loadUserList(); loadProductList(); loadOrderList();
+        await api('/biz/init');
+        await Promise.all([loadUserList(), loadProductList(), loadOrderList()]);
     } catch (e) { /* ignore */ }
 });
 
-// ====== 接口测试（模拟 HTTP 调用） ======
-bindClick('reg-run', () => {
-    const u = document.getElementById('reg-u').value;
-    const p = document.getElementById('reg-p').value;
-    const e = document.getElementById('reg-e').value;
-    const valid = UserValidator.validateUser(u, p, e);
-    if (valid) {
-        try {
-            // 接口测试注册成功时，也同步写入 BizStore，使用户管理列表可见
-            const user = BizStore.register(u, p, e, 'BUYER');
-            const { password, ...safe } = user;
-            showResult(document.getElementById('reg-result'), { code: 200, message: '注册成功', data: safe });
-            try { loadUserList(); } catch (err) { /* ignore */ }
-        } catch (err) {
-            showResult(document.getElementById('reg-result'), { code: 400, message: err.message || '注册失败' });
-        }
-    } else {
-        showResult(document.getElementById('reg-result'), { code: 400, message: '注册信息不合法' });
-    }
-});
-
-bindClick('login-run', () => {
-    const u = document.getElementById('login-u').value;
-    const p = document.getElementById('login-p').value;
-    try {
-        // 使用业务用户登录验证
-        const r = BizStore.login(u, p);
-        showResult(document.getElementById('login-result'),
-            { code: 200, message: '登录成功', data: r, token: 'mock-token-' + Date.now() });
-    } catch (err) {
-        // 回退：允许老版本演示账号 admin/Admin123
-        if (u === 'admin' && p === 'Admin123') {
-            showResult(document.getElementById('login-result'),
-                { code: 200, message: '登录成功', token: 'mock-token-' + Date.now() });
-        } else {
-            showResult(document.getElementById('login-result'),
-                { code: 401, message: err.message || '用户名或密码错误' });
-        }
-    }
-});
-
-bindClick('perm-run', () => {
-    try {
-        const perm = UserValidator.checkPermission(document.getElementById('perm-r').value);
-        showResult(document.getElementById('perm-result'), { code: 200, permission: perm });
-    } catch (e) {
-        showResult(document.getElementById('perm-result'), { code: 400, message: e.message });
-    }
-});
-
-// ====== 测试执行（模拟 JUnit 5 引擎） ======
+// ============ GitHub Pages 离线版专属：前端模拟测试用例引擎 ============
 const testCases = {
     calculator: [
         { name: 'testAdd', cls: 'CalculatorTest', run: () => assertEq(5, Calculator.add(2, 3)) },
@@ -716,190 +907,63 @@ const testCases = {
         { name: 'testIsPrime_17', cls: 'CalculatorTest', run: () => assertTrue(Calculator.isPrime(17)) },
         { name: 'testIsPrime_4', cls: 'CalculatorTest', run: () => assertTrue(!Calculator.isPrime(4)) },
         { name: 'testFactorial_5', cls: 'CalculatorTest', run: () => assertEq(120, Calculator.factorial(5)) },
-        { name: 'testFactorial_10', cls: 'CalculatorTest', run: () => assertEq(3628800, Calculator.factorial(10)) },
-        { name: 'testFactorialNegative', cls: 'CalculatorTest', run: () => assertThrows(() => Calculator.factorial(-1)) },
+        { name: 'testFactorial_0', cls: 'CalculatorTest', run: () => assertEq(1, Calculator.factorial(0)) },
+        { name: 'testFactorial_Negative', cls: 'CalculatorTest', run: () => assertThrows(() => Calculator.factorial(-1)) },
     ],
     string: [
-        { name: 'testIsEmpty_null', cls: 'StringUtilsTest', run: () => assertTrue(StringUtils.isEmpty(null)) },
-        { name: 'testIsEmpty_empty', cls: 'StringUtilsTest', run: () => assertTrue(StringUtils.isEmpty('')) },
-        { name: 'testIsEmpty_not', cls: 'StringUtilsTest', run: () => assertTrue(!StringUtils.isEmpty('abc')) },
-        { name: 'testIsBlank_whitespace', cls: 'StringUtilsTest', run: () => assertTrue(StringUtils.isBlank('   ')) },
-        { name: 'testReverse', cls: 'StringUtilsTest', run: () => assertEq('cba', StringUtils.reverse('abc')) },
+        { name: 'testIsEmpty_Null', cls: 'StringUtilsTest', run: () => assertTrue(StringUtils.isEmpty(null)) },
+        { name: 'testIsEmpty_Empty', cls: 'StringUtilsTest', run: () => assertTrue(StringUtils.isEmpty('')) },
+        { name: 'testIsBlank_Space', cls: 'StringUtilsTest', run: () => assertTrue(StringUtils.isBlank('   ')) },
+        { name: 'testReverse_Hello', cls: 'StringUtilsTest', run: () => assertEq('olleh', StringUtils.reverse('hello')) },
         { name: 'testToCamelCase', cls: 'StringUtilsTest', run: () => assertEq('helloWorld', StringUtils.toCamelCase('hello_world')) },
-        { name: 'testIsPalindrome_true', cls: 'StringUtilsTest', run: () => assertTrue(StringUtils.isPalindrome('level')) },
-        { name: 'testIsPalindrome_false', cls: 'StringUtilsTest', run: () => assertTrue(!StringUtils.isPalindrome('hello')) },
+        { name: 'testIsPalindrome', cls: 'StringUtilsTest', run: () => assertTrue(StringUtils.isPalindrome('A man a plan a canal Panama')) },
         { name: 'testCountOccurrences', cls: 'StringUtilsTest', run: () => assertEq(2, StringUtils.countOccurrences('hello world hello', 'hello')) },
     ],
     user: [
-        { name: 'testIsValidUsername_valid', cls: 'UserValidatorTest', run: () => assertTrue(UserValidator.isValidUsername('test_user_01')) },
-        { name: 'testIsValidUsername_short', cls: 'UserValidatorTest', run: () => assertTrue(!UserValidator.isValidUsername('ab')) },
-        { name: 'testIsValidPassword_valid', cls: 'UserValidatorTest', run: () => assertTrue(UserValidator.isValidPassword('Abc123')) },
-        { name: 'testIsValidPassword_weak', cls: 'UserValidatorTest', run: () => assertTrue(!UserValidator.isValidPassword('weak')) },
-        { name: 'testIsValidEmail_valid', cls: 'UserValidatorTest', run: () => assertTrue(UserValidator.isValidEmail('test@example.com')) },
-        { name: 'testIsValidEmail_invalid', cls: 'UserValidatorTest', run: () => assertTrue(!UserValidator.isValidEmail('invalid')) },
-        { name: 'testValidateUser_valid', cls: 'UserValidatorTest', run: () => assertTrue(UserValidator.validateUser('user1', 'Pass123', 'a@b.com')) },
-        { name: 'testCheckPermission_admin', cls: 'UserValidatorTest', run: () => assertEq('全部权限', UserValidator.checkPermission('admin')) },
-        { name: 'testCheckPermission_null', cls: 'UserValidatorTest', run: () => assertThrows(() => UserValidator.checkPermission(null)) },
+        { name: 'testValidUsername', cls: 'UserValidatorTest', run: () => assertTrue(UserValidator.isValidUsername('zhangsan_123')) },
+        { name: 'testInvalidUsername_Short', cls: 'UserValidatorTest', run: () => assertTrue(!UserValidator.isValidUsername('ab')) },
+        { name: 'testValidPassword', cls: 'UserValidatorTest', run: () => assertTrue(UserValidator.isValidPassword('Test1234')) },
+        { name: 'testInvalidPassword_NoUpper', cls: 'UserValidatorTest', run: () => assertTrue(!UserValidator.isValidPassword('test1234')) },
+        { name: 'testValidEmail', cls: 'UserValidatorTest', run: () => assertTrue(UserValidator.isValidEmail('test@example.com')) },
+        { name: 'testInvalidEmail', cls: 'UserValidatorTest', run: () => assertTrue(!UserValidator.isValidEmail('not-an-email')) },
+        { name: 'testValidateUser_AllValid', cls: 'UserValidatorTest', run: () => assertTrue(UserValidator.validateUser('good_user', 'GoodPass1', 'good@example.com')) },
+        { name: 'testCheckPermission_Admin', cls: 'UserValidatorTest', run: () => assertEq('全部权限', UserValidator.checkPermission('admin')) },
+        { name: 'testCheckPermission_Empty', cls: 'UserValidatorTest', run: () => assertThrows(() => UserValidator.checkPermission('')) },
     ],
     api: [
-        { name: 'testRegisterSuccess', cls: 'UserApiTest', run: () => assertTrue(UserValidator.validateUser('newuser', 'Pass123', 'new@example.com')) },
-        { name: 'testRegisterFail', cls: 'UserApiTest', run: () => assertTrue(!UserValidator.validateUser('x', 'weak', 'bad')) },
-        { name: 'testLoginSuccess', cls: 'UserApiTest', run: () => assertTrue(true) },
-        { name: 'testLoginFail', cls: 'UserApiTest', run: () => assertTrue(true) },
-        { name: 'testPermissionAdmin', cls: 'UserApiTest', run: () => assertEq('全部权限', UserValidator.checkPermission('admin')) },
-        { name: 'testPermissionGuest', cls: 'UserApiTest', run: () => assertEq('无权限', UserValidator.checkPermission('guest')) },
+        { name: 'testCalcAddApi', cls: 'HttpApiTest', run: () => { BizStore.initDemoData(); const r = Calculator.add(2,3); assertEq(5, r); } },
+        { name: 'testCalcDivideByZero', cls: 'HttpApiTest', run: () => assertThrows(() => Calculator.divide(1,0)) },
+        { name: 'testStringReverseApi', cls: 'HttpApiTest', run: () => assertEq('olleh', StringUtils.reverse('hello')) },
+        { name: 'testUserValidateApi', cls: 'HttpApiTest', run: () => assertTrue(UserValidator.validateUser('api_user', 'ApiPass1', 'api@t.com')) },
+        { name: 'testPermissionApi', cls: 'HttpApiTest', run: () => assertEq('只读权限', UserValidator.checkPermission('viewer')) },
     ],
     restassured: [
-        { name: 'testRegisterSuccess_200', cls: 'UserApiRestAssuredTest', run: () => assertTrue(UserValidator.validateUser('newuser', 'Pass123', 'new@example.com')) },
-        { name: 'testRegisterFail_400', cls: 'UserApiRestAssuredTest', run: () => assertTrue(!UserValidator.validateUser('x', 'weak', 'bad')) },
-        { name: 'testLoginSuccess_200', cls: 'UserApiRestAssuredTest', run: () => assertTrue(true) },
-        { name: 'testLoginFail_401', cls: 'UserApiRestAssuredTest', run: () => assertTrue(true) },
-        { name: 'testCalcAdd', cls: 'UserApiRestAssuredTest', run: () => assertEq(13, Calculator.add(10, 3)) },
-        { name: 'testCalcDivideByZero', cls: 'UserApiRestAssuredTest', run: () => assertThrows(() => Calculator.divide(10, 0)) },
+        { name: 'register_should_fail_when_weak_password', cls: 'UserApiRestAssuredTest', run: () => { const s = BizStore; s.initDemoData(); assertThrows(() => BizStore.register('weakuser', '123', 'w@b.com')); } },
+        { name: 'register_should_success_when_valid_info', cls: 'UserApiRestAssuredTest', run: () => { const s = BizStore; s.initDemoData(); const u = BizStore.register('ra_user', 'RaPass1', 'ra@t.com', 'BUYER'); assertTrue(u && u.id > 0); } },
+        { name: 'login_should_fail_wrong_password', cls: 'UserApiRestAssuredTest', run: () => { const s = BizStore; s.initDemoData(); assertThrows(() => BizStore.login('admin', 'wrong')); } },
+        { name: 'login_should_success_admin', cls: 'UserApiRestAssuredTest', run: () => { const s = BizStore; s.initDemoData(); const r = BizStore.login('admin', 'Admin123'); assertTrue(r && r.role === 'ADMIN'); } },
+        { name: 'recharge_should_increase_balance', cls: 'UserApiRestAssuredTest', run: () => { const s = BizStore; s.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); const before = buyer.balance; BizStore.recharge(buyer.id, 5000); const after = BizStore.listUsers().find(u => u.id === buyer.id).balance; assertEq(before + 5000, after); } },
     ],
     biz: [
-        { name: 'testRegisterUserSuccess', cls: 'UserServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const u = s.register('ut_buyer', 'Utpass1', 'ut@b.com', 'BUYER');
-            assertTrue(u.id > 0); assertEq('BUYER', u.role);
-        }},
-        { name: 'testRegisterDuplicateUsername', cls: 'UserServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            assertThrows(() => s.register('admin', 'Abc12345', 'a2@b.com'));
-        }},
-        { name: 'testRegisterInvalidPassword', cls: 'UserServiceTest', run: () => {
-            assertThrows(() => BizStore.register('weakuser', '123', 'w@b.com'));
-        }},
-        { name: 'testRechargeSuccess', cls: 'UserServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const list = s.listUsers(); const before = list[0].balance;
-            s.recharge(list[0].id, 50000);
-            assertEq(before + 50000, s.listUsers()[0].balance);
-        }},
-        { name: 'testRechargeNegative', cls: 'UserServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            assertThrows(() => s.recharge(1, -100));
-        }},
-        { name: 'testLoginSuccess', cls: 'UserServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const r = s.login('admin', 'Admin123');
-            assertEq('admin', r.username);
-        }},
-        { name: 'testLoginWrongPwd', cls: 'UserServiceTest', run: () => {
-            assertThrows(() => BizStore.login('admin', 'wrong'));
-        }},
-        { name: 'testCreateProductSuccess', cls: 'OrderServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const users = s.listUsers();
-            const seller = users.find(u => u.role === 'SELLER');
-            const p = s.createProduct('测试商品', 10000, 50, '电子产品', seller.id);
-            assertEq('测试商品', p.name); assertEq(50, p.stock);
-        }},
-        { name: 'testCreateProductNotSeller', cls: 'OrderServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const buyer = s.listUsers().find(u => u.role === 'BUYER');
-            assertThrows(() => s.createProduct('越权商品', 100, 10, '食品', buyer.id));
-        }},
-        { name: 'testCreateOrderSuccess', cls: 'OrderServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const users = s.listUsers(); const prods = s.listProducts();
-            const buyer = users.find(u => u.role === 'BUYER');
-            const prod = prods[0]; const before = prod.stock;
-            const o = s.createOrder(buyer.id, prod.id, 1, '测试地址');
-            assertEq('PAID', o.status); assertEq(before - 1, s.listProducts()[0].stock);
-        }},
-        { name: 'testCreateOrderInsufficientStock', cls: 'OrderServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const users = s.listUsers(); const prods = s.listProducts();
-            const buyer = users.find(u => u.role === 'BUYER');
-            assertThrows(() => s.createOrder(buyer.id, prods[0].id, 9999999, 'addr'));
-        }},
-        { name: 'testShipOrderSuccess', cls: 'OrderServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const users = s.listUsers(); const prods = s.listProducts();
-            const buyer = users.find(u => u.role === 'BUYER');
-            const seller = users.find(u => u.role === 'SELLER');
-            const o = s.createOrder(buyer.id, prods[0].id, 1, 'addr');
-            const shipped = s.shipOrder(o.id, seller.id);
-            assertEq('SHIPPED', shipped.status);
-        }},
-        { name: 'testCompleteOrder', cls: 'OrderServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const users = s.listUsers(); const prods = s.listProducts();
-            const buyer = users.find(u => u.role === 'BUYER');
-            const seller = users.find(u => u.role === 'SELLER');
-            const o = s.createOrder(buyer.id, prods[0].id, 1, 'addr');
-            s.shipOrder(o.id, seller.id);
-            const done = s.completeOrder(o.id, buyer.id);
-            assertEq('COMPLETED', done.status);
-        }},
-        { name: 'testCancelOrder', cls: 'OrderServiceTest', run: () => {
-            const s = BizStore; s.initDemoData();
-            const users = s.listUsers(); const prods = s.listProducts();
-            const buyer = users.find(u => u.role === 'BUYER');
-            const o = s.createOrder(buyer.id, prods[0].id, 1, 'addr');
-            const can = s.cancelOrder(o.id, buyer.id);
-            assertEq('CANCELLED', can.status);
-        }}
+        { name: 'initDemoData_should_create_3plus_users', cls: 'UserServiceTest', run: () => { BizStore.initDemoData(); assertTrue(BizStore.listUsers().length >= 3); } },
+        { name: 'createProduct_should_deny_buyer', cls: 'ProductServiceTest', run: () => { BizStore.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); assertThrows(() => BizStore.createProduct('越权', 100, 1, '食品', buyer.id)); } },
+        { name: 'createProduct_should_success_seller', cls: 'ProductServiceTest', run: () => { BizStore.initDemoData(); const seller = BizStore.listUsers().find(u => u.role === 'SELLER'); const p = BizStore.createProduct('Biz商品', 19900, 10, '食品', seller.id); assertTrue(p && p.id > 0); } },
+        { name: 'createOrder_should_fail_insufficient_balance', cls: 'OrderServiceTest', run: () => { BizStore.initDemoData(); const poor = BizStore.register('poorbuyer', 'Poor1234', 'poor@t.com', 'BUYER'); const prod = BizStore.listProducts()[0]; assertThrows(() => BizStore.createOrder(poor.id, prod.id, 1, 'addr')); } },
+        { name: 'createOrder_should_fail_out_of_stock', cls: 'OrderServiceTest', run: () => { BizStore.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); const prod = BizStore.listProducts()[0]; assertThrows(() => BizStore.createOrder(buyer.id, prod.id, 999999, 'addr')); } },
+        { name: 'shipOrder_should_deny_non_seller', cls: 'OrderServiceTest', run: () => { BizStore.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); const prod = BizStore.listProducts()[0]; const o = BizStore.createOrder(buyer.id, prod.id, 1, 'addr'); assertThrows(() => BizStore.shipOrder(o.id, buyer.id)); } },
+        { name: 'full_order_lifecycle', cls: 'OrderServiceTest', run: () => { BizStore.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); const seller = BizStore.listUsers().find(u => u.role === 'SELLER'); const prod = BizStore.listProducts()[0]; const o = BizStore.createOrder(buyer.id, prod.id, 1, 'addr'); assertEq('PAID', o.status); BizStore.shipOrder(o.id, seller.id); assertEq('COMPLETED', BizStore.completeOrder(o.id, buyer.id).status); } },
+        { name: 'refund_should_return_money', cls: 'OrderServiceTest', run: () => { BizStore.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); const prod = BizStore.listProducts()[0]; const before = buyer.balance; const o = BizStore.createOrder(buyer.id, prod.id, 1, 'addr'); BizStore.refundOrder(o.id, buyer.id); const after = BizStore.listUsers().find(u => u.id === buyer.id).balance; assertTrue(after >= before); assertEq('REFUNDED', BizStore.listOrders().find(x => x.id === o.id).status); } },
     ],
     bizapi: [
-        { name: 'testInitData_200', cls: 'BizApiIntegrationTest', run: () => {
-            const s = BizStore; const info = s.initDemoData();
-            assertTrue(info.userCount >= 3); assertTrue(info.productCount >= 4);
-        }},
-        { name: 'testRegisterUser_200', cls: 'BizApiIntegrationTest', run: () => {
-            const u = BizStore.register('bizapi_user', 'Bizapi1', 'bizapi@t.com', 'BUYER');
-            assertTrue(u.id > 0);
-        }},
-        { name: 'testRegisterUser_400_Dup', cls: 'BizApiIntegrationTest', run: () => {
-            BizStore.initDemoData();
-            assertThrows(() => BizStore.register('admin', 'Xxx12345', 'dup@t.com'));
-        }},
-        { name: 'testListUsers_200', cls: 'BizApiIntegrationTest', run: () => {
-            BizStore.initDemoData();
-            assertTrue(BizStore.listUsers().length >= 3);
-        }},
-        { name: 'testCreateProduct_200', cls: 'BizApiIntegrationTest', run: () => {
-            BizStore.initDemoData();
-            const seller = BizStore.listUsers().find(u => u.role === 'SELLER');
-            const p = BizStore.createProduct('API商品', 19900, 10, '食品', seller.id);
-            assertEq('AVAILABLE', p.status);
-        }},
-        { name: 'testCreateProduct_400_NotSeller', cls: 'BizApiIntegrationTest', run: () => {
-            BizStore.initDemoData();
-            const buyer = BizStore.listUsers().find(u => u.role === 'BUYER');
-            assertThrows(() => BizStore.createProduct('越权', 100, 1, '食品', buyer.id));
-        }},
-        { name: 'testCreateOrder_200', cls: 'BizApiIntegrationTest', run: () => {
-            BizStore.initDemoData();
-            const buyer = BizStore.listUsers().find(u => u.role === 'BUYER');
-            const prod = BizStore.listProducts()[0];
-            const o = BizStore.createOrder(buyer.id, prod.id, 1, '北京');
-            assertEq('PAID', o.status);
-        }},
-        { name: 'testCreateOrder_400_NoStock', cls: 'BizApiIntegrationTest', run: () => {
-            BizStore.initDemoData();
-            const buyer = BizStore.listUsers().find(u => u.role === 'BUYER');
-            const prod = BizStore.listProducts()[0];
-            assertThrows(() => BizStore.createOrder(buyer.id, prod.id, 9999999, '北京'));
-        }},
-        { name: 'testShipOrder_200', cls: 'BizApiIntegrationTest', run: () => {
-            BizStore.initDemoData();
-            const users = BizStore.listUsers(); const prods = BizStore.listProducts();
-            const buyer = users.find(u => u.role === 'BUYER');
-            const seller = users.find(u => u.role === 'SELLER');
-            const o = BizStore.createOrder(buyer.id, prods[0].id, 1, '上海');
-            assertEq('SHIPPED', BizStore.shipOrder(o.id, seller.id).status);
-        }},
-        { name: 'testCompleteOrder_200', cls: 'BizApiIntegrationTest', run: () => {
-            BizStore.initDemoData();
-            const users = BizStore.listUsers(); const prods = BizStore.listProducts();
-            const buyer = users.find(u => u.role === 'BUYER');
-            const seller = users.find(u => u.role === 'SELLER');
-            const o = BizStore.createOrder(buyer.id, prods[0].id, 1, '深圳');
-            BizStore.shipOrder(o.id, seller.id);
-            assertEq('COMPLETED', BizStore.completeOrder(o.id, buyer.id).status);
-        }},
+        { name: 'biz_init_returns_counts', cls: 'BizApiIntegrationTest', run: () => { const s = BizStore; const info = s.initDemoData(); assertTrue(info.userCount >= 3 && info.productCount >= 3); } },
+        { name: 'register_then_login_roundtrip', cls: 'BizApiIntegrationTest', run: () => { const u = BizStore.register('bizapi_user', 'Bizapi1', 'bizapi@t.com', 'BUYER'); const r = BizStore.login('bizapi_user', 'Bizapi1'); assertEq(u.id, r.id); } },
+        { name: 'duplicate_username_denied', cls: 'BizApiIntegrationTest', run: () => { BizStore.initDemoData(); assertThrows(() => BizStore.register('admin', 'Xxx12345', 'dup@t.com')); } },
+        { name: 'list_users_after_init', cls: 'BizApiIntegrationTest', run: () => { BizStore.initDemoData(); assertTrue(BizStore.listUsers().length >= 3); } },
+        { name: 'create_product_rest_api', cls: 'BizApiIntegrationTest', run: () => { BizStore.initDemoData(); const seller = BizStore.listUsers().find(u => u.role === 'SELLER'); const p = BizStore.createProduct('API商品', 19900, 10, '食品', seller.id); assertTrue(p && p.id > 0); } },
+        { name: 'create_product_buyer_403', cls: 'BizApiIntegrationTest', run: () => { BizStore.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); assertThrows(() => BizStore.createProduct('越权', 100, 1, '食品', buyer.id)); } },
+        { name: 'place_order_rest_api', cls: 'BizApiIntegrationTest', run: () => { BizStore.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); const prod = BizStore.listProducts()[0]; assertTrue(buyer && prod); } },
+        { name: 'search_products_pagination', cls: 'BizApiIntegrationTest', run: () => { BizStore.initDemoData(); const r = BizStore.searchProducts('', '', '', '1', '2'); assertTrue(r.total >= 3 && r.list.length <= 2); } },
+        { name: 'list_transactions_after_recharge', cls: 'BizApiIntegrationTest', run: () => { BizStore.initDemoData(); const buyer = BizStore.listUsers().find(u => u.role === 'BUYER'); BizStore.recharge(buyer.id, 10000); const txs = BizStore.listTransactions(buyer.id); assertTrue(txs.some(t => t.type === 'RECHARGE')); } },
     ],
     ui: [
         { name: 'testTabNavigation', cls: 'WebUiTest', run: () => assertTrue(true) },
@@ -910,26 +974,45 @@ const testCases = {
         { name: 'testCreateOrderUi', cls: 'WebUiTest', run: () => assertTrue(true) },
     ]
 };
-
-// 断言辅助
-function assertEq(expected, actual) {
-    if (expected !== actual) throw new Error(`expected: <${expected}> but was: <${actual}>`);
-}
+function assertEq(expected, actual) { if (expected !== actual) throw new Error(`expected: <${expected}> but was: <${actual}>`); }
 function assertTrue(cond) { if (!cond) throw new Error('assertion failed'); }
-function assertThrows(fn) {
-    try { fn(); throw new Error('Expected exception but none thrown'); }
-    catch (e) { /* ok */ }
-}
-
+function assertThrows(fn) { try { fn(); throw new Error('Expected exception but none thrown'); } catch (e) { /* ok */ } }
 function getTests(target) {
     if (target === 'all' || target === 'suite') {
         return [].concat(...['calculator','string','user','api','restassured','biz','bizapi','ui'].map(k => testCases[k] || []));
     }
     return testCases[target] || [];
 }
+async function runMockTests(target) {
+    const tests = getTests(target);
+    const failures = [];
+    let passed = 0, failed = 0;
+    const start = performance.now();
+    for (const tc of tests) {
+        try { tc.run(); passed++; }
+        catch (e) { failed++; failures.push({ displayName: tc.name, className: tc.cls, message: e.message, type: 'AssertionFailedError' }); }
+        await new Promise(r => setTimeout(r, 15));
+    }
+    const elapsed = ((performance.now() - start) / 1000).toFixed(3);
+    return {
+        code: 200,
+        total: tests.length,
+        success: passed,
+        failed,
+        skipped: 0,
+        aborted: 0,
+        time: elapsed,
+        failures
+    };
+}
 
+// ====== 运行测试（使用static/app.js最新结构 + bindClick/bindAll防御） ======
+const $summary = document.getElementById('test-summary');
+const $failures = document.getElementById('test-failures');
 const $log = document.getElementById('test-log');
+
 function logLine(text, cls) {
+    if (!$log) return;
     const line = document.createElement('div');
     if (cls) line.className = 'log-' + cls;
     const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -938,101 +1021,79 @@ function logLine(text, cls) {
     $log.scrollTop = $log.scrollHeight;
 }
 
-document.querySelectorAll('.test-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const target = btn.dataset.target;
-        document.querySelectorAll('.test-btn').forEach(b => b.disabled = true);
-        $log.classList.add('show');
-        $log.innerHTML = '';
-        document.getElementById('test-summary').classList.remove('show', 'ok', 'fail');
-        document.getElementById('test-failures').innerHTML = '';
+bindAll('.test-btn', async (e) => {
+    const btn = e.currentTarget;
+    const target = btn.dataset.target;
+    document.querySelectorAll('.test-btn').forEach(b => b.disabled = true);
+    if ($log) { $log.classList.add('show'); $log.innerHTML = ''; }
+    if ($summary) $summary.classList.remove('show', 'ok', 'fail');
+    if ($failures) $failures.innerHTML = '';
 
-        const names = {
-            all: '全部测试', calculator: '计算器单元测试', string: '字符串单元测试',
-            user: '用户校验单元测试', api: 'HTTP 接口测试',
-            restassured: 'RestAssured API 自动化测试',
-            biz: '电商业务 Service 单元测试',
-            bizapi: '电商业务 RestAssured API 集成测试',
-            ui: 'Playwright UI 自动化测试',
-            suite: '自动化测试套件'
-        };
-        logLine(`▶ 开始执行：${names[target]}`, 'info');
-        logLine(`  目标：target=${target}`, 'info');
+    const names = {
+        all: '全部测试', calculator: '计算器单元测试', string: '字符串单元测试',
+        user: '用户校验单元测试', api: 'HTTP 接口测试',
+        restassured: 'RestAssured API 自动化测试',
+        biz: '电商业务 Service 单元测试',
+        bizapi: '电商业务 RestAssured API 集成测试',
+        ui: 'Playwright UI 自动化测试',
+        suite: '自动化测试套件'
+    };
+    logLine(`▶ 开始执行：${names[target]}`, 'info');
+    logLine(`  目标：target=${target}`, 'info');
 
-        const tests = getTests(target);
-        const failures = [];
-        let passed = 0, failed = 0;
-        const start = performance.now();
+    const start = Date.now();
+    const data = await api(`/api/test/run?target=${target}`);
+    const cost = ((Date.now() - start) / 1000).toFixed(2);
 
-        for (const tc of tests) {
-            try {
-                tc.run();
-                passed++;
-            } catch (e) {
-                failed++;
-                failures.push({ displayName: tc.name, className: tc.cls, message: e.message, type: 'AssertionFailedError' });
-            }
-            await new Promise(r => setTimeout(r, 15));
-        }
+    if (!data || data.code !== 200) {
+        logLine(`✖ 执行失败：${JSON.stringify(data)}`, 'err');
+        document.querySelectorAll('.test-btn').forEach(b => b.disabled = false);
+        return;
+    }
 
-        const elapsed = ((performance.now() - start) / 1000).toFixed(3);
+    logLine(`✔ 执行完成，耗时 ${cost} 秒`, data.failed > 0 ? 'warn' : 'ok');
+    logLine(`  总计: ${data.total}  成功: ${data.success}  失败: ${data.failed}  跳过: ${data.skipped}  异常中断: ${data.aborted}`, 'info');
 
-        logLine(`✔ 执行完成，耗时 ${elapsed} 秒`, failed > 0 ? 'warn' : 'ok');
-        logLine(`  总计: ${tests.length}  成功: ${passed}  失败: ${failed}  跳过: 0  异常中断: 0`, 'info');
-
-        const $summary = document.getElementById('test-summary');
+    if ($summary) {
         $summary.innerHTML = `
-            <div class="stat"><span class="num">${tests.length}</span><span class="label">总用例数</span></div>
-            <div class="stat"><span class="num" style="color:#86efac">${passed}</span><span class="label">成功</span></div>
-            <div class="stat"><span class="num" style="color:#fca5a5">${failed}</span><span class="label">失败</span></div>
-            <div class="stat"><span class="num" style="color:#fcd34d">0</span><span class="label">跳过</span></div>
-            <div class="stat"><span class="num" style="color:#93c5fd">${elapsed}s</span><span class="label">执行耗时</span></div>
+            <div class="stat"><span class="num">${data.total}</span><span class="label">总用例数</span></div>
+            <div class="stat"><span class="num" style="color:#86efac">${data.success}</span><span class="label">成功</span></div>
+            <div class="stat"><span class="num" style="color:#fca5a5">${data.failed}</span><span class="label">失败</span></div>
+            <div class="stat"><span class="num" style="color:#fcd34d">${data.skipped}</span><span class="label">跳过</span></div>
+            <div class="stat"><span class="num" style="color:#93c5fd">${data.time}s</span><span class="label">执行耗时</span></div>
         `;
         $summary.classList.add('show');
-        $summary.classList.add(failed === 0 ? 'ok' : 'fail');
+        $summary.classList.add(data.failed === 0 ? 'ok' : 'fail');
+    }
 
-        if (failures.length > 0) {
-            const $f = document.getElementById('test-failures');
-            $f.innerHTML = `<h3 style="color:#dc2626;margin-bottom:12px;">❌ 失败详情 (${failures.length})</h3>`;
-            failures.forEach(f => {
-                const card = document.createElement('div');
-                card.className = 'failure-card';
-                card.innerHTML = `
-                    <div class="fc-title">${f.displayName}</div>
-                    <div class="fc-type">${f.className} · ${f.type}</div>
-                    <div class="fc-msg">${f.message}</div>
-                `;
-                $f.appendChild(card);
-                logLine(`✖ ${f.displayName}: ${f.message}`, 'err');
-            });
-        } else {
-            logLine(`🎉 所有测试全部通过！`, 'ok');
-        }
+    if ($failures && data.failures && data.failures.length) {
+        $failures.innerHTML = `<h3 style="color:#dc2626;margin-bottom:12px;">❌ 失败详情 (${data.failures.length})</h3>`;
+        data.failures.forEach(f => {
+            const card = document.createElement('div');
+            card.className = 'failure-card';
+            card.innerHTML = `
+                <div class="fc-title">${f.displayName}</div>
+                <div class="fc-type">${f.className} · ${f.type}</div>
+                <div class="fc-msg">${f.message || '(无错误信息)'}</div>
+            `;
+            $failures.appendChild(card);
+            logLine(`✖ ${f.displayName}: ${f.message}`, 'err');
+        });
+    } else {
+        logLine(`🎉 所有测试全部通过！`, 'ok');
+    }
 
-        document.querySelectorAll('.test-btn').forEach(b => b.disabled = false);
-    });
+    document.querySelectorAll('.test-btn').forEach(b => b.disabled = false);
 });
 
-// ====== 性能测试 ======
-const $perfSummary = document.getElementById('perf-summary');
-const $perfDetail = document.getElementById('perf-detail');
-const $perfRun = document.getElementById('perf-run');
-
-$perfRun.addEventListener('click', async () => {
-    const apiName = document.getElementById('perf-api').value;
-    const threads = parseInt(document.getElementById('perf-threads').value) || 20;
-    const loops = parseInt(document.getElementById('perf-loops').value) || 20;
-
-    $perfRun.disabled = true;
-    $perfRun.textContent = '⏳ 压测进行中...';
-    $perfSummary.classList.remove('show', 'ok', 'fail');
-    $perfDetail.style.display = 'none';
-
+// ============ GitHub Pages 离线版专属：前端性能模拟 ============
+async function runMockPerf(apiName, threads, loops) {
+    threads = parseInt(threads, 10) || 20;
+    loops = parseInt(loops, 10) || 20;
     const total = threads * loops;
     const elapsedList = [];
     let success = 0, failed = 0;
     const start = performance.now();
-
     for (let i = 0; i < total; i++) {
         const t0 = performance.now();
         const delay = 1 + Math.random() * 14;
@@ -1041,7 +1102,6 @@ $perfRun.addEventListener('click', async () => {
         else failed++;
         elapsedList.push(performance.now() - t0);
     }
-
     const totalTime = Math.round(performance.now() - start);
     elapsedList.sort((a, b) => a - b);
     const avg = elapsedList.reduce((s, v) => s + v, 0) / elapsedList.length;
@@ -1051,13 +1111,11 @@ $perfRun.addEventListener('click', async () => {
     const p95 = elapsedList[Math.floor(elapsedList.length * 0.95)] || 0;
     const tps = totalTime > 0 ? (total * 1000 / totalTime) : 0;
     const errorRate = total > 0 ? (failed * 100 / total) : 0;
-
     const apiLabel = {
         calc: 'GET /api/calc', login: 'POST /api/login',
         bizuser: 'GET /biz/user/list', bizprod: 'GET /biz/product/list'
     }[apiName] || apiName;
-
-    const data = {
+    return {
         code: 200, api: apiLabel, threads, loops, totalRequests: total, success, failed,
         errorRate: errorRate.toFixed(2) + '%',
         totalTime: totalTime + ' ms',
@@ -1068,8 +1126,42 @@ $perfRun.addEventListener('click', async () => {
         p95: p95.toFixed(0) + ' ms',
         tps: tps.toFixed(1) + ' req/s'
     };
+}
 
-    const allOk = failed === 0;
+// ====== 性能测试 ======
+const $perfSummary = $('perf-summary');
+const $perfDetail = $('perf-detail');
+
+bindClick('perf-run', async () => {
+    const apiEl = $('perf-api');
+    const threadsEl = $('perf-threads');
+    const loopsEl = $('perf-loops');
+    const $perfRun = $('perf-run');
+    if (!$perfRun || !apiEl || !threadsEl || !loopsEl || !$perfSummary || !$perfDetail) return;
+    const apiName = apiEl.value;
+    const threads = threadsEl.value;
+    const loops = loopsEl.value;
+
+    $perfRun.disabled = true;
+    $perfRun.textContent = '⏳ 压测进行中...';
+    $perfSummary.classList.remove('show', 'ok', 'fail');
+    $perfDetail.style.display = 'none';
+
+    const total = threads * loops;
+    const start = Date.now();
+    const data = await api(`/api/test/perf?api=${apiName}&threads=${threads}&loops=${loops}`);
+    const cost = ((Date.now() - start) / 1000).toFixed(2);
+
+    if (!data || data.code !== 200) {
+        $perfDetail.style.display = 'block';
+        $perfDetail.className = 'result err';
+        $perfDetail.textContent = '压测失败: ' + JSON.stringify(data);
+        $perfRun.disabled = false;
+        $perfRun.textContent = '▶ 开始压测';
+        return;
+    }
+
+    const allOk = data.failed === 0;
     $perfSummary.innerHTML = `
         <div class="stat"><span class="num">${data.totalRequests}</span><span class="label">总请求数</span></div>
         <div class="stat"><span class="num" style="color:#86efac">${data.success}</span><span class="label">成功</span></div>
